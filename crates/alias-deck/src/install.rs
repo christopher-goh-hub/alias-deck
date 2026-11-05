@@ -35,7 +35,7 @@ pub fn fetch(paths: &Paths, source: &Source) -> Result<Candidate, Error> {
         Source::Git { url, path, reference } => {
             let commit = git::resolve(paths, url, reference.as_ref())?;
             let bytes = git::fetch_file(paths, url, &commit, path)?;
-            let text = String::from_utf8(bytes).map_err(|_| Error::Git {
+            let text = String::from_utf8(bytes).map_err(|_| Error::Command {
                 command: format!("git cat-file blob {}:{}", commit, path.as_str()),
                 detail: "the pack is not UTF-8 text".into(),
             })?;

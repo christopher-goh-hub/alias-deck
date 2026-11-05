@@ -24,9 +24,9 @@ fn git(paths: &Paths, cwd: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, Erro
         .env_remove("GIT_INDEX_FILE")
         .stdin(Stdio::null());
     let command = format!("git {}", args.join(" "));
-    let out = cmd.output().map_err(|e| Error::Git { command: command.clone(), detail: e.to_string() })?;
+    let out = cmd.output().map_err(|e| Error::Command { command: command.clone(), detail: e.to_string() })?;
     if !out.status.success() {
-        return Err(Error::Git { command, detail: String::from_utf8_lossy(&out.stderr).into_owned() });
+        return Err(Error::Command { command, detail: String::from_utf8_lossy(&out.stderr).into_owned() });
     }
     Ok(out.stdout)
 }
@@ -47,7 +47,7 @@ pub fn resolve(paths: &Paths, url: &GitUrl, reference: Option<&GitRef>) -> Resul
         vec![format!("refs/tags/{name}^{{}}"), format!("refs/tags/{name}"), format!("refs/heads/{name}")]
     };
     wanted.iter().find_map(|w| refs.iter().find(|(_, r)| r == w)).and_then(|(oid, _)| CommitId::new(oid)).ok_or_else(
-        || Error::Git {
+        || Error::Command {
             command: format!("git ls-remote -- {} {name}", url.as_str()),
             detail: format!("no branch or tag named `{name}`"),
         },

@@ -12,6 +12,7 @@ mod fsx;
 mod git;
 mod install;
 mod paths;
+mod setup;
 mod store;
 
 pub use approval::{decide, Confirm, Decision};
@@ -21,4 +22,5 @@ pub use install::{
     approve, check_update, context, fetch, list, remove, Candidate, Clash, Context, ListedPack, Removed, UpdateCheck,
 };
 pub use paths::{host_os, Paths};
+pub use setup::{setup, SetupChange, BLOCK_END, BLOCK_START};
 pub use store::sha256;

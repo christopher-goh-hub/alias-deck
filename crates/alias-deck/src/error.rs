@@ -18,7 +18,8 @@ pub enum Error {
         src: String,
         errors: Vec<ParseError>,
     },
-    Git {
+    /// A child process (git, pwsh) failed or could not start.
+    Command {
         command: String,
         detail: String,
     },
@@ -63,7 +64,7 @@ impl fmt::Display for Error {
                 }
                 Ok(())
             }
-            Error::Git { command, detail } => write!(f, "{command} failed: {}", detail.trim_end()),
+            Error::Command { command, detail } => write!(f, "{command} failed: {}", detail.trim_end()),
             Error::Tampered { path, expected, actual } => write!(
                 f,
                 "{} does not match what you approved (expected sha256 {expected}, found {actual}); \

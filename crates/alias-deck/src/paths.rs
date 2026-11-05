@@ -13,6 +13,8 @@ pub struct Paths {
     pub config_home: PathBuf,
     /// `$XDG_DATA_HOME`, default `~/.local/share`.
     pub data_home: PathBuf,
+    /// `$ZDOTDIR`, where zsh reads `.zshrc` instead of the home directory.
+    pub zdotdir: Option<PathBuf>,
 }
 
 impl Paths {
@@ -23,6 +25,7 @@ impl Paths {
         Ok(Paths {
             config_home: abs("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config")),
             data_home: abs("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local/share")),
+            zdotdir: abs("ZDOTDIR"),
             home,
         })
     }

@@ -21,7 +21,8 @@ impl World {
         let root = tmp.path().canonicalize().unwrap();
         let home = root.join("home");
         fs::create_dir_all(&home).unwrap();
-        let paths = Paths { config_home: home.join(".config"), data_home: home.join(".local/share"), home };
+        let paths =
+            Paths { config_home: home.join(".config"), data_home: home.join(".local/share"), zdotdir: None, home };
         World { _tmp: tmp, root, paths }
     }
 
@@ -76,4 +77,41 @@ impl World {
 
 pub fn pack(name: &str, body: &str) -> String {
     format!("format = 1\n[pack]\nname = \"{name}\"\nversion = \"1.0.0\"\nlicense = \"MIT\"\ndescription = \"test pack\"\n{body}")
+}
+
+/// A shell binary to run, or `None` when it is not installed. `ALIAS_DECK_REQUIRE_ALL_SHELLS=1`
+/// turns a missing shell into a failure, as in the core harness.
+pub fn find_shell(name: &str) -> Option<PathBuf> {
+    let mut dirs: Vec<PathBuf> =
+        std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+    dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].map(PathBuf::from));
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.push(Path::new(&home).join(".local/bin"));
+    }
+    let found = dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file());
+    if found.is_none() {
+        assert!(std::env::var_os("ALIAS_DECK_REQUIRE_ALL_SHELLS").is_none(), "{name} is required but not installed");
+        eprintln!("skipped: {name} is not installed");
+    }
+    found
+}
+
+impl World {
+    /// Runs `script` in `shell` with this world's HOME and XDG dirs, and `extra_path` first on PATH.
+    pub fn shell(&self, shell: &Path, args: &[&str], script: &str) -> std::process::Output {
+        let path = std::env::join_paths([shell.parent().unwrap().to_owned()].into_iter().chain(
+            std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default(),
+        ))
+        .unwrap();
+        Command::new(shell)
+            .args(args)
+            .arg(script)
+            .envs(self.envs())
+            .env("PATH", path)
+            .env_remove("ZDOTDIR")
+            .env_remove("BASH_ENV")
+            .env_remove("ENV")
+            .output()
+            .unwrap()
+    }
 }
