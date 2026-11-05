@@ -19,9 +19,12 @@
 mod compile;
 mod document;
 mod lint;
+mod lock;
+mod manifest;
 mod model;
 mod secrets;
 mod shells;
+mod source;
 mod writer;
 
 pub use compile::{
@@ -29,8 +32,11 @@ pub use compile::{
 };
 pub use document::{PackDocument, ParseError, ParseErrorKind};
 pub use lint::{lint, Finding, Rule, Severity};
+pub use lock::{CommitId, Lock, LockedPack, Sha256};
+pub use manifest::{Manifest, ManifestPack};
 pub use model::{
     Alias, Argv, CommandName, Dialect, Entry, EntryName, EntryRef, EnvEntry, EnvName, EnvValue, Function, FunctionBody,
     Group, InShell, InvalidValue, Os, OsSet, Pack, PackMeta, Slug, Text, Word,
 };
 pub use secrets::{Bindings, SecretSource};
+pub use source::{GitRef, GitUrl, RepoPath, Source, SourceError};

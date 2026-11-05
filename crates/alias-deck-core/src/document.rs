@@ -11,6 +11,7 @@ use crate::model::{
     Alias, Argv, CommandName, Dialect, Entry, EnvEntry, EnvName, EnvValue, Function, FunctionBody, Group, InShell,
     InvalidValue, Os, OsSet, Pack, PackMeta, Slug, Text, Word,
 };
+use crate::source::SourceError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
@@ -37,6 +38,12 @@ pub enum ParseErrorKind {
     SecretSourceShape,
     /// A `file` binding must be absolute or start with `~/`, so it never depends on the cwd.
     RelativeSecretPath,
+    BadSource(SourceError),
+    /// The manifest lists one pack twice.
+    DuplicateSource(String),
+    BadDigest {
+        expected: &'static str,
+    },
 }
 
 impl ParseError {
@@ -65,6 +72,9 @@ impl fmt::Display for ParseError {
                 f.write_str("a binding needs exactly one of `keychain`, `file`, or `command`")
             }
             ParseErrorKind::RelativeSecretPath => f.write_str("a secret file path must be absolute or start with `~/`"),
+            ParseErrorKind::BadSource(why) => write!(f, "invalid source: {why}"),
+            ParseErrorKind::DuplicateSource(s) => write!(f, "`{s}` is listed twice"),
+            ParseErrorKind::BadDigest { expected } => write!(f, "expected {expected}"),
         }
     }
 }
@@ -166,6 +176,15 @@ impl Cx {
         self.valid(Argv::new(program, words.collect()), item, at)
     }
 
+    /// Every file alias-deck reads starts with `format = 1`, so a later format fails loudly.
+    pub fn format_one(&mut self, root: &dyn TableLike, whole: &Range<usize>) {
+        match root.get("format") {
+            Some(f) if f.as_integer() == Some(1) => {}
+            Some(f) => self.error(span(f, whole), ParseErrorKind::UnsupportedFormat),
+            None => self.error(0..0, ParseErrorKind::UnsupportedFormat),
+        }
+    }
+
     pub fn valid<T>(&mut self, r: Result<T, InvalidValue>, item: &Item, at: &Range<usize>) -> Option<T> {
         r.map_err(|e| self.error(span(item, at), ParseErrorKind::Invalid(e))).ok()
     }
@@ -213,11 +232,7 @@ impl PackDocument {
 
 fn parse_pack(cx: &mut Cx, root: &dyn TableLike, whole: &Range<usize>) -> Option<Pack> {
     cx.only_keys(root, &["format", "pack", "groups"], whole);
-    match root.get("format") {
-        Some(f) if f.as_integer() == Some(1) => {}
-        Some(f) => cx.error(span(f, whole), ParseErrorKind::UnsupportedFormat),
-        None => cx.error(0..0, ParseErrorKind::UnsupportedFormat),
-    }
+    cx.format_one(root, whole);
     let meta = match root.get("pack") {
         Some(item) => cx.table(item, whole).and_then(|t| parse_meta(cx, t, &span(item, whole))),
         None => {
