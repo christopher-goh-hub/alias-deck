@@ -60,9 +60,13 @@ fn shell_defaults_to_the_login_shell() {
     let out = run(&["compile", "examples/devkit.toml", "--os", "linux"], Some("/usr/local/bin/fish"));
     assert!(out.status.success());
     assert!(text(&out.stdout).contains("# target: fish on linux\n"));
-    let out = run(&["compile", "examples/devkit.toml"], None);
-    assert_eq!(out.status.code(), Some(2), "no $SHELL and no --shell is a usage error");
-    assert!(text(&out.stderr).contains("pass --shell"));
+    let out = run(&["compile", "examples/devkit.toml", "--os", "linux"], None);
+    if cfg!(windows) {
+        assert!(text(&out.stdout).contains("# target: pwsh on linux\n"), "Windows defaults to PowerShell");
+    } else {
+        assert_eq!(out.status.code(), Some(2), "no $SHELL and no --shell is a usage error");
+        assert!(text(&out.stderr).contains("pass --shell"));
+    }
 }
 
 #[test]

@@ -26,22 +26,21 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     let mut tmp = tempfile::NamedTempFile::new_in(dir).map_err(Error::io(dir))?;
     tmp.write_all(bytes).map_err(Error::io(tmp.path()))?;
     tmp.as_file().sync_all().map_err(Error::io(tmp.path()))?;
-    let perms = match fs::metadata(&target) {
-        Ok(m) => m.permissions(),
-        Err(_) => default_permissions(),
-    };
-    fs::set_permissions(tmp.path(), perms).map_err(Error::io(tmp.path()))?;
+    if let Some(perms) = fs::metadata(&target).ok().map(|m| m.permissions()).or_else(new_file_permissions) {
+        fs::set_permissions(tmp.path(), perms).map_err(Error::io(tmp.path()))?;
+    }
     tmp.persist(&target).map_err(|e| Error::io(&target)(e.error))?;
     Ok(())
 }
 
+/// A temp file starts private (0600), but a new init or rc file should read like any other.
 #[cfg(unix)]
-fn default_permissions() -> fs::Permissions {
+fn new_file_permissions() -> Option<fs::Permissions> {
     use std::os::unix::fs::PermissionsExt;
-    fs::Permissions::from_mode(0o644)
+    Some(fs::Permissions::from_mode(0o644))
 }
 
 #[cfg(not(unix))]
-fn default_permissions() -> fs::Permissions {
-    fs::metadata(".").map(|m| m.permissions()).expect("the cwd has metadata")
+fn new_file_permissions() -> Option<fs::Permissions> {
+    None
 }

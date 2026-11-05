@@ -99,7 +99,12 @@ fn add_without_a_terminal_shows_the_preview_and_refuses_without_writing() {
 #[test]
 fn sourcing_the_built_init_file_defines_the_alias_in_zsh_and_bash() {
     let (w, _, _) = installed();
-    let run = "eval hello; eval greet; alias hello";
+    // Script functions run in /bin/sh, so a build on Windows leaves greet out.
+    let (run, greeted) = if cfg!(windows) {
+        ("eval hello; alias hello", "")
+    } else {
+        ("eval hello; eval greet; alias hello", "hi from greet\n")
+    };
     let mut shells: Vec<(PathBuf, Vec<String>, Shell, &str)> = Vec::new();
     if let Some(zsh) = find_shell("zsh") {
         let script = format!("source \"$1\"; {run}");
@@ -119,7 +124,7 @@ fn sourcing_the_built_init_file_defines_the_alias_in_zsh_and_bash() {
             .env_remove("BASH_ENV")
             .output()
             .unwrap();
-        assert_eq!(ok(&out), format!("hello\nhi from greet\n{alias_line}"), "{}", bin.display());
+        assert_eq!(ok(&out), format!("hello\n{greeted}{alias_line}"), "{}", bin.display());
     }
 }
 
@@ -136,7 +141,11 @@ fn update_shows_the_changed_function_body() {
     assert!(stdout.contains("New findings: none"), "{stdout}");
 
     ok(&cli(&w, &["update", "--yes"]));
-    assert!(fs::read_to_string(w.paths.init(Shell::Bash)).unwrap().contains("echo hello from greet"));
+    let approved = fs::read_to_string(w.paths.store_pack(&lock(&w).packs()[0].sha256)).unwrap();
+    assert!(approved.contains("echo hello from greet"), "the lock now pins the new bytes");
+    if cfg!(not(windows)) {
+        assert!(fs::read_to_string(w.paths.init(Shell::Bash)).unwrap().contains("echo hello from greet"));
+    }
     assert!(ok(&cli(&w, &["update"])).contains(": up to date"));
 }
 
@@ -188,9 +197,15 @@ fn a_local_source_change_is_picked_up_live_by_build() {
     let file = w.root.join("mine.toml");
     fs::write(&file, pack("mine", "[groups.g.aliases]\nll = \"ls -l\"\n")).unwrap();
     ok(&cli(&w, &["add", "./mine.toml", "--yes"]));
+    let manifest = fs::read_to_string(w.paths.manifest()).unwrap();
+    let stored = manifest
+        .lines()
+        .find_map(|l| l.strip_prefix("source = "))
+        .map(|v| v.trim_matches(|c| c == '"' || c == '\''))
+        .unwrap_or_else(|| panic!("{manifest}"));
     assert!(
-        fs::read_to_string(w.paths.manifest()).unwrap().contains(&format!("source = \"{}\"", file.display())),
-        "a relative path is stored absolute"
+        std::path::Path::new(stored).is_absolute() && stored.ends_with("mine.toml"),
+        "a relative path is stored absolute: {manifest}"
     );
     fs::write(&file, pack("mine", "[groups.g.aliases]\nll = \"ls -la\"\n")).unwrap();
     ok(&cli(&w, &["build"]));
@@ -208,7 +223,19 @@ fn build_twice_writes_identical_bytes_and_prints_the_pwsh_note_once() {
     assert_eq!(before, after);
     let stderr = text(&out.stderr);
     let notes: Vec<&str> = stderr.lines().filter(|l| l.contains("note:")).collect();
-    assert_eq!(notes, ["alias-deck: note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before 2 wrapper functions see them: tools/git/hello, tools/git/greet"], "{stderr}");
+    let wrapped = if cfg!(windows) {
+        assert!(stderr.contains("tools/git/greet: omitted in bash, zsh, fish, pwsh: script functions need /bin/sh"));
+        "1 wrapper function sees them: tools/git/hello"
+    } else {
+        "2 wrapper functions see them: tools/git/hello, tools/git/greet"
+    };
+    assert_eq!(
+        notes,
+        [format!(
+            "alias-deck: note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before {wrapped}"
+        )],
+        "{stderr}"
+    );
     assert!(stderr.contains("alias-deck: tools/nav/mkcd: omitted in pwsh: no body for pwsh"), "{stderr}");
 }
 
@@ -226,6 +253,7 @@ fn setup_twice_leaves_one_block_and_zsh_sees_the_alias() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "pwsh on Windows puts the profile under the real Documents folder, whatever HOME says")]
 fn setup_for_pwsh_edits_its_profile_once_and_pwsh_loads_the_deck() {
     let (w, _, _) = installed();
     let Some(pwsh) = find_shell("pwsh") else { return };

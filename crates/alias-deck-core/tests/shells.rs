@@ -5,14 +5,18 @@
 //! (argv, exported env bytes, cwd, stdin) instead of running the harness. Expectations come from
 //! the parsed pack model, never from the shell under test.
 //!
-//! A shell that is not installed is skipped and printed. `ALIAS_DECK_REQUIRE_ALL_SHELLS=1`
-//! turns a skip into a failure.
+//! A shell that is not installed is skipped and printed. `ALIAS_DECK_REQUIRE_SHELLS=bash,pwsh`
+//! fails the run unless each named shell ran in at least one configuration;
+//! `ALIAS_DECK_REQUIRE_ALL_SHELLS=1` names all four.
+//!
+//! On Windows the harness does not run: its expectations assume POSIX paths, a `HOME` that pwsh
+//! honors, and `:` as the PATH separator. The CLI's tests source the built files in pwsh and
+//! Git Bash there instead.
 
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::io::{Read, Write as _};
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
@@ -39,11 +43,21 @@ const FUZZ_COUNT: usize = 150;
 
 fn main() -> ExitCode {
     let argv0 = env::args_os().next().unwrap_or_default();
-    let name = Path::new(&argv0).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = Path::new(&argv0).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     if !name.starts_with("shells") {
         return probe(&name, env::args_os().skip(1).collect());
     }
     harness()
+}
+
+#[cfg(unix)]
+fn os_bytes(s: &OsStr) -> Vec<u8> {
+    std::os::unix::ffi::OsStrExt::as_bytes(s).to_vec()
+}
+
+#[cfg(not(unix))]
+fn os_bytes(s: &OsStr) -> Vec<u8> {
+    s.to_string_lossy().into_owned().into_bytes()
 }
 
 fn hex(b: &[u8]) -> String {
@@ -65,13 +79,13 @@ fn probe(name: &str, args: Vec<OsString>) -> ExitCode {
         "envprobe" => {
             for a in &args {
                 match env::var_os(a) {
-                    Some(v) => writeln!(out, "@@ENV {} {}", a.to_string_lossy(), hex(v.as_bytes())),
+                    Some(v) => writeln!(out, "@@ENV {} {}", a.to_string_lossy(), hex(&os_bytes(&v))),
                     None => writeln!(out, "@@ENV {} UNSET", a.to_string_lossy()),
                 }
                 .unwrap();
             }
         }
-        "cwdprobe" => writeln!(out, "@@CWD {}", hex(env::current_dir().unwrap().as_os_str().as_bytes())).unwrap(),
+        "cwdprobe" => writeln!(out, "@@CWD {}", hex(&os_bytes(env::current_dir().unwrap().as_os_str()))).unwrap(),
         "secretprobe" => match args.first().and_then(|a| a.to_str()) {
             Some("found") => write!(out, "{SECRET}\n\n").unwrap(),
             Some("empty") => {}
@@ -875,6 +889,19 @@ fn evaluate(
     n
 }
 
+#[cfg(unix)]
+fn link_probe(exe: &Path, link: &Path) {
+    std::os::unix::fs::symlink(exe, link).unwrap();
+}
+
+#[cfg(not(unix))]
+fn link_probe(exe: &Path, link: &Path) {
+    let link = link.with_extension("exe");
+    if fs::hard_link(exe, &link).is_err() {
+        fs::copy(exe, &link).unwrap();
+    }
+}
+
 fn host_os() -> Os {
     if cfg!(target_os = "macos") {
         Os::MacOs
@@ -981,8 +1008,27 @@ fn run_config(c: &Config, bin: &Path, version: &str, work: &Path, idx: usize) ->
     ConfigResult { label: format!("{} ({version})", c.label), lines, failures }
 }
 
+/// The shells this run must exercise, from `ALIAS_DECK_REQUIRE_SHELLS` (a comma-separated list)
+/// or `ALIAS_DECK_REQUIRE_ALL_SHELLS=1`. An unknown name panics, so a typo in CI cannot quietly
+/// require nothing.
+fn required_shells() -> Vec<Shell> {
+    if env::var("ALIAS_DECK_REQUIRE_ALL_SHELLS").is_ok_and(|v| v == "1") {
+        return Shell::ALL.to_vec();
+    }
+    let list = env::var("ALIAS_DECK_REQUIRE_SHELLS").unwrap_or_default();
+    list.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| Shell::from_key(s).unwrap_or_else(|| panic!("ALIAS_DECK_REQUIRE_SHELLS: unknown shell `{s}`")))
+        .collect()
+}
+
 fn harness() -> ExitCode {
-    let require_all = env::var("ALIAS_DECK_REQUIRE_ALL_SHELLS").is_ok_and(|v| v == "1");
+    let required = required_shells();
+    if cfg!(windows) {
+        println!("real-shell harness: not run on Windows; the CLI's tests source the built files in pwsh and bash");
+        return ExitCode::SUCCESS;
+    }
     let work = env::temp_dir().join(format!("alias-deck-shells-{}", std::process::id()));
     let _ = fs::remove_dir_all(&work);
     fs::create_dir_all(work.join("stub")).unwrap();
@@ -990,14 +1036,14 @@ fn harness() -> ExitCode {
     let work = work.canonicalize().unwrap();
     let exe = env::current_exe().unwrap();
     for name in PROBES.iter().chain(&["git", "sudo", "grep"]) {
-        std::os::unix::fs::symlink(&exe, work.join("stub").join(name)).unwrap();
+        link_probe(&exe, &work.join("stub").join(name));
     }
 
     let mut handles = Vec::new();
     let mut skipped = Vec::new();
     for (idx, c) in CONFIGS.iter().enumerate() {
         match find_shell(c) {
-            None => skipped.push(c.label),
+            None => skipped.push(c),
             Some((bin, version)) => {
                 let work = work.clone();
                 handles.push(thread::spawn(move || run_config(c, &bin, &version, &work, idx)));
@@ -1018,8 +1064,8 @@ fn harness() -> ExitCode {
     for l in &total_lines {
         println!("{l}");
     }
-    for s in &skipped {
-        println!("  {s:<44} SKIPPED: not installed");
+    for c in &skipped {
+        println!("  {:<44} SKIPPED: not installed", c.label);
     }
     if failed == 0 {
         let _ = fs::remove_dir_all(&work);
@@ -1028,8 +1074,10 @@ fn harness() -> ExitCode {
         println!("{failed} failed checks; work dir kept at {}", work.display());
         return ExitCode::FAILURE;
     }
-    if require_all && !skipped.is_empty() {
-        println!("ALIAS_DECK_REQUIRE_ALL_SHELLS=1 and {} shell configuration(s) are missing", skipped.len());
+    let ran = |shell: Shell| CONFIGS.iter().any(|c| c.shell == shell && !skipped.iter().any(|s| s.label == c.label));
+    let missing: Vec<&str> = required.iter().filter(|s| !ran(**s)).map(|s| s.key()).collect();
+    if !missing.is_empty() {
+        println!("required shells did not run: {}", missing.join(", "));
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS

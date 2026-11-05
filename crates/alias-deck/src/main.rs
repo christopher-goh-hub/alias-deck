@@ -8,11 +8,11 @@ use std::process::ExitCode;
 use std::{env, fs};
 
 use alias_deck::{
-    approve, build, check_update, context, decide, fetch, find_pack, list, load_installed, remove, setup, Confirm,
-    Decision, Error, Paths, UpdateCheck,
+    approve, build, check_update, context, decide, fetch, find_pack, list, load_installed, load_registries, remove,
+    setup, Confirm, Decision, Error, Paths, Registries, Registry, UpdateCheck,
 };
 use alias_deck_core::{
-    compile, diff_packs, lint, Bindings, CompileOptions, Deck, Finding, Os, PackDocument, Rule, Severity, Shell,
+    compile, diff_packs, lint, Bindings, CompileOptions, Deck, Finding, Os, PackDocument, Rule, Severity, Shell, Slug,
     Source, Target,
 };
 
@@ -21,7 +21,9 @@ usage: alias-deck <command> [options]
 
 Install shared packs of shell aliases, functions, and environment variables.
 
-  add <source>[@ref] [--yes] [--allow <rule>]...
+  search [<term>] [--refresh]
+                       find packs in the registries by name, description, or tag
+  add <name>|<source>[@ref] [--yes] [--allow <rule>]...
                        fetch a pack, show everything it adds, and install it once you approve
   update [<pack>] [--yes] [--allow <rule>]...
                        show what changed upstream and install it once you approve
@@ -33,6 +35,7 @@ Install shared packs of shell aliases, functions, and environment variables.
   compile <pack.toml>... [--shell <s>] [--os <os>] [--secrets <file>]
                        print one compiled file to stdout
 
+A name such as git-essentials is looked up in the registries; a listing is not a review.
 Sources: ./pack.toml, ~/pack.toml, /abs/pack.toml, github:owner/repo[//path.toml],
 git+https://host/repo.git[//path.toml], git+file:///dir/repo[//path.toml].
 Without a terminal, add and update need --yes. A Danger finding also needs --allow <rule>.
@@ -42,6 +45,7 @@ Shells: bash, zsh, fish, pwsh. --shell defaults to $SHELL.";
 struct Args {
     positional: Vec<String>,
     yes: bool,
+    refresh: bool,
     allow: Vec<Rule>,
     shell: Option<Shell>,
     os: Option<Os>,
@@ -62,6 +66,7 @@ fn main() -> ExitCode {
     let flags: &[&str] = match command.as_str() {
         "add" | "update" => &["--yes", "--allow"],
         "setup" => &["--shell"],
+        "search" => &["--refresh"],
         "compile" => &["--shell", "--os", "--secrets"],
         "remove" | "list" | "build" | "lint" => &[],
         other => return usage_error(&format!("unknown command `{other}`")),
@@ -72,7 +77,7 @@ fn main() -> ExitCode {
     };
     let arity = match command.as_str() {
         "add" | "remove" => args.positional.len() == 1,
-        "update" => args.positional.len() <= 1,
+        "update" | "search" => args.positional.len() <= 1,
         "list" | "build" | "setup" => args.positional.is_empty(),
         _ => !args.positional.is_empty(),
     };
@@ -86,6 +91,7 @@ fn main() -> ExitCode {
             Err(e) => fail(&e),
             Ok(paths) => match command.as_str() {
                 "add" => run_add(&paths, &args),
+                "search" => run_search(&paths, &args),
                 "update" => run_update(&paths, &args),
                 "remove" => run_remove(&paths, &args.positional[0]),
                 "list" => run_list(&paths),
@@ -120,6 +126,7 @@ fn parse_args(argv: &[String], allowed: &[&str]) -> Result<Args, String> {
         let mut value = || it.next().cloned().ok_or_else(|| format!("{flag} needs a value"));
         match flag {
             "--yes" => args.yes = true,
+            "--refresh" => args.refresh = true,
             "--allow" => {
                 let v = value()?;
                 let ids: Vec<&str> = Rule::all().map(Rule::id).collect();
@@ -142,9 +149,10 @@ fn parse_args(argv: &[String], allowed: &[&str]) -> Result<Args, String> {
     Ok(args)
 }
 
-/// `$SHELL` names the login shell, which is the one most users want an init file for.
+/// `$SHELL` names the login shell, which is the one most users want an init file for. Windows
+/// sets no `$SHELL` outside Git Bash, and PowerShell is its shell.
 fn detect_shell() -> Option<Shell> {
-    let shell = env::var_os("SHELL")?;
+    let Some(shell) = env::var_os("SHELL") else { return cfg!(windows).then_some(Shell::Pwsh) };
     let name = Path::new(&shell).file_name()?.to_str()?;
     Shell::from_key(name.strip_suffix(".exe").unwrap_or(name))
 }
@@ -232,12 +240,46 @@ fn absolute_source(source: Source) -> Source {
     }
 }
 
-fn run_add(paths: &Paths, args: &Args) -> ExitCode {
-    let source = match Source::parse_with_ref(&args.positional[0]) {
-        Ok(s) => absolute_source(s),
-        Err(e) => return usage_error(&format!("`{}`: {e}", args.positional[0])),
+/// Notes on stderr for registries that were unreachable or served from an old cache.
+fn registry_notes(registries: &Registries) {
+    eprint!("{}", render::registry_notes(registries));
+}
+
+fn run_search(paths: &Paths, args: &Args) -> ExitCode {
+    let term = args.positional.first().map_or("", String::as_str);
+    let registries = match load_registries(paths, args.refresh) {
+        Ok(r) => r,
+        Err(e) => return fail(&e),
     };
+    registry_notes(&registries);
+    if registries.loaded.is_empty() {
+        return ExitCode::FAILURE;
+    }
+    print!("{}", render::search(&registries, term));
+    ExitCode::SUCCESS
+}
+
+fn run_add(paths: &Paths, args: &Args) -> ExitCode {
+    let spelled = &args.positional[0];
+    // A bare name: a local file always starts with `.`, `/`, `~`, or a drive letter.
+    let by_name = Slug::new(spelled).is_ok();
+    let parsed = if by_name { None } else { Some(Source::parse_with_ref(spelled)) };
+    if let Some(Err(e)) = &parsed {
+        return usage_error(&format!("`{spelled}`: {e}"));
+    }
     let result = (|| {
+        let (source, via): (Source, Option<Registry>) = match parsed {
+            Some(Ok(s)) => (absolute_source(s), None),
+            _ => {
+                let registries = load_registries(paths, false)?;
+                registry_notes(&registries);
+                let found = registries.find(spelled).ok_or_else(|| Error::NotInRegistry {
+                    name: spelled.clone(),
+                    searched: registries.loaded.iter().map(|r| r.source.clone()).collect(),
+                })?;
+                (found.entry.source.clone(), Some(found.registry.clone()))
+            }
+        };
         let installed = load_installed(paths)?;
         if let Some(existing) = installed.manifest.find(&source) {
             if existing.source.reference() == source.reference() {
@@ -247,7 +289,7 @@ fn run_add(paths: &Paths, args: &Args) -> ExitCode {
         }
         let cand = fetch(paths, &source)?;
         let ctx = context(paths, &installed, &cand)?;
-        print!("{}", render::preview(&cand, &ctx));
+        print!("{}", render::preview(&cand, &ctx, via.as_ref()));
         let name = cand.doc.pack().meta().name.as_str().to_owned();
         if !approved(decide(&cand.findings, args.yes, &args.allow), &name, &cand.findings) {
             return Ok(ExitCode::FAILURE);
@@ -277,7 +319,7 @@ fn run_update(paths: &Paths, args: &Args) -> ExitCode {
                     let name = new.doc.pack().meta().name.as_str().to_owned();
                     let findings = match &old {
                         None => {
-                            print!("{}", render::preview(&new, &context(paths, &installed, &new)?));
+                            print!("{}", render::preview(&new, &context(paths, &installed, &new)?, None));
                             new.findings.clone()
                         }
                         Some(old) => {

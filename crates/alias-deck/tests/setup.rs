@@ -33,6 +33,7 @@ fn setup_twice_leaves_one_block_and_keeps_the_users_lines() {
     assert_eq!(text.lines().nth(second[0].line_number - 1), Some(second[0].line.as_str()));
 }
 
+#[cfg(unix)]
 #[test]
 fn setup_follows_a_symlinked_rc_file() {
     let w = world_with_alias();

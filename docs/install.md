@@ -1,16 +1,28 @@
 # Install and update packs
 
-This guide covers installing a pack someone else wrote, wiring it into your shell, and taking updates. The same commands work on a laptop and on a server you reach over SSH.
+This guide covers finding a pack, installing it, wiring it into your shell, and taking updates. The same commands work on a laptop and on a server you reach over SSH. [The README](../README.md#install) shows how to install alias-deck itself.
+
+## Find a pack
+
+```sh
+alias-deck search            # every pack in the registries
+alias-deck search docker     # packs whose name, description, or tags contain "docker"
+```
+
+`search` prints each pack's name, description, tags, and source, then the registry it read and the commit it read it at. alias-deck caches each registry's index for a day. `search --refresh` fetches it again now. Without a network, `search` uses the cached index and says how old it is.
 
 ## Add a pack
 
 ```sh
+alias-deck add git-essentials
 alias-deck add github:alice/dotpacks//git.toml
 ```
 
+A bare name such as `git-essentials` is looked up in the registries, which turns it into a source. From there, both commands do the same thing. A listing in a registry is not a review: nobody has approved the pack for you.
+
 `add` fetches the pack, checks it, and prints a preview before it writes anything. The preview shows:
 
-1. The pack's name, version, license, source, resolved commit, and the SHA-256 of its bytes.
+1. The pack's name, version, license, source, resolved commit, and the SHA-256 of its bytes. For a name, also the registry that listed it.
 2. Every function body in full. A `script` function runs in `/bin/sh`. A `native` function runs inside your shell, so it can change your directory and variables.
 3. Every environment variable and `PATH` change, and each secret the pack asks for, with whether your secrets file binds it.
 4. Every alias, as the command it runs.
@@ -59,6 +71,8 @@ ssh host alias-deck add github:alice/dotpacks//git.toml --yes
 ssh host alias-deck setup --shell bash
 ```
 
+The same works with a name, as in `ssh host alias-deck add git-essentials --yes`.
+
 `--yes` does not approve a Danger finding. Name each Danger rule you accept:
 
 ```sh
@@ -98,8 +112,9 @@ alias-deck builds after every `add`, `update`, and `remove`. Run `alias-deck bui
 | `$XDG_CONFIG_HOME/alias-deck/secrets.toml` | Your secret bindings | You |
 | `$XDG_DATA_HOME/alias-deck/packs/<sha256>.toml` | The approved bytes of each git pack | alias-deck |
 | `$XDG_DATA_HOME/alias-deck/init.{bash,zsh,fish,ps1}` | The compiled files your shell sources | alias-deck |
+| `$XDG_DATA_HOME/alias-deck/registries/<hash>.toml` | Each registry's cached index, with the commit it came from on the first line | alias-deck |
 
-`$XDG_CONFIG_HOME` defaults to `~/.config` and `$XDG_DATA_HOME` to `~/.local/share`. A relative path in `deck.toml` is relative to the directory that holds `deck.toml`. `alias-deck add ./x.toml` stores the absolute path.
+`$XDG_CONFIG_HOME` defaults to `~/.config` and `$XDG_DATA_HOME` to `~/.local/share`, on Windows too. On Windows, `~` is `%USERPROFILE%` unless `HOME` is set, as it is in Git Bash. A relative path in `deck.toml` is relative to the directory that holds `deck.toml`. `alias-deck add ./x.toml` stores the absolute path.
 
 A build reads a git pack only from the store and hashes it again. If the hash differs from the lock, the build fails and names the file. It writes nothing in that case, so the init files from the last good build stay in place. `alias-deck update` fetches the pack again and shows you what you would approve.
 
@@ -107,9 +122,25 @@ A build reads a git pack only from the store and hashes it again. If the hash di
 
 | You type | Meaning |
 |---|---|
-| `./x.toml`, `../x.toml`, `/abs/x.toml`, `~/x.toml` | A local file |
+| `git-essentials` | The source a registry lists for that name. Only `add` takes a name |
+| `./x.toml`, `../x.toml`, `/abs/x.toml`, `~/x.toml`, `C:\x.toml` | A local file |
 | `github:owner/repo` | `pack.toml` in `https://github.com/owner/repo.git` |
 | `github:owner/repo//dir/x.toml` | That file in the same repository |
 | `git+https://host/repo.git//x.toml` | Any repository over HTTPS. `git+ssh://`, `git+git@host:path`, and `git+file://` work the same way |
 
 alias-deck fetches with the `git` command, so your SSH keys and credential helpers apply. Git does not prompt for a username or password, so a fetch that needs one fails instead of waiting. alias-deck rejects a source that starts with `-`, a path inside the repository that contains `..`, and `http://` URLs.
+
+## Choose your registries
+
+With no setting, alias-deck reads the official registry, [`registry/index.toml`](../registry/index.toml) in this repository, on `main`. To read others, list them in `deck.toml`. The list replaces the official registry, so include it if you want to keep it. When two registries list the same name, the later one wins.
+
+```toml
+[[registries]]
+source = "github:christopher-goh-hub/alias-deck//registry/index.toml"
+ref = "main"
+
+[[registries]]
+source = "git+https://git.example.com/team/packs.git//index.toml"
+```
+
+A registry must be a git source. The lock records the source a name resolved to, not the name, so `update` and `build` never read a registry, and removing a registry does not remove packs you installed from it.

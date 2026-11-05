@@ -41,6 +41,8 @@ pub enum ParseErrorKind {
     BadSource(SourceError),
     /// The manifest lists one pack twice.
     DuplicateSource(String),
+    /// A registry index lists one pack name twice.
+    DuplicateName(String),
     BadDigest {
         expected: &'static str,
     },
@@ -73,7 +75,7 @@ impl fmt::Display for ParseError {
             }
             ParseErrorKind::RelativeSecretPath => f.write_str("a secret file path must be absolute or start with `~/`"),
             ParseErrorKind::BadSource(why) => write!(f, "invalid source: {why}"),
-            ParseErrorKind::DuplicateSource(s) => write!(f, "`{s}` is listed twice"),
+            ParseErrorKind::DuplicateSource(s) | ParseErrorKind::DuplicateName(s) => write!(f, "`{s}` is listed twice"),
             ParseErrorKind::BadDigest { expected } => write!(f, "expected {expected}"),
         }
     }

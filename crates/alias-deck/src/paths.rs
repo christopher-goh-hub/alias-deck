@@ -19,9 +19,10 @@ pub struct Paths {
 
 impl Paths {
     /// The XDG spec says to ignore a relative value, so one never points the deck at the cwd.
+    /// Windows sets `USERPROFILE` rather than `HOME`, except inside Git Bash.
     pub fn from_env() -> Result<Paths, Error> {
         let abs = |var: &str| env::var_os(var).map(PathBuf::from).filter(|p| p.is_absolute());
-        let home = abs("HOME").ok_or(Error::NoHome)?;
+        let home = abs("HOME").or_else(|| abs("USERPROFILE").filter(|_| cfg!(windows))).ok_or(Error::NoHome)?;
         Ok(Paths {
             config_home: abs("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config")),
             data_home: abs("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local/share")),

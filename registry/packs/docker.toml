@@ -1,0 +1,48 @@
+format = 1
+
+[pack]
+name = "docker"
+version = "1.0.0"
+license = "MIT"
+description = "Docker and Docker Compose shortcuts: containers, images, logs, and a shell inside a running container."
+requires = ["docker"]
+
+[groups.containers]
+description = "Containers and images"
+
+[groups.containers.aliases]
+d = "docker"
+dps = "docker ps"
+dpsa = "docker ps -a"
+di = "docker images"
+drun = "docker run --rm -it"
+dex = "docker exec -it"
+dlogs = "docker logs -f"
+dstop = "docker stop"
+dprune = "docker system prune"
+
+[groups.containers.functions.dsh]
+description = "Open a shell in a running container: dsh CONTAINER [SHELL], default sh"
+shell.posix = 'docker exec -it "$1" "${2:-sh}"'
+shell.fish = '''
+set -l sh sh
+set -q argv[2]; and set sh $argv[2]
+docker exec -it $argv[1] $sh
+'''
+shell.pwsh = '''
+$sh = if ($args.Count -gt 1) { $args[1] } else { 'sh' }
+docker exec -it $args[0] $sh
+'''
+
+[groups.compose]
+description = "Docker Compose"
+
+[groups.compose.aliases]
+dco = "docker compose"
+dcup = "docker compose up -d"
+dcdn = "docker compose down"
+dcl = "docker compose logs -f"
+dcb = "docker compose build"
+dcr = "docker compose run --rm"
+dcps = "docker compose ps"
+dcre = "docker compose restart"
