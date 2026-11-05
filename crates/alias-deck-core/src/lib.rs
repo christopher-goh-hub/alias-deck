@@ -3,6 +3,7 @@
 mod document;
 mod model;
 mod secrets;
+mod writer;
 
 pub use document::{PackDocument, ParseError, ParseErrorKind};
 pub use model::{

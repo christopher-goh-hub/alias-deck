@@ -113,8 +113,8 @@ A hostile body that closes its own wrapper ran at source time in 5 of 5 shells w
 
 | Shell | Literal | Bare when |
 |---|---|---|
-| bash, zsh | `'…'`, with `'` written as `'\''` | `[A-Za-z0-9_./:@%+,=-]+`, and not starting with `=` (zsh EQUALS) |
-| fish | `'…'`, with `\` and `'` backslash-escaped | `[A-Za-z0-9_./:@%+,=-]+` |
+| bash, zsh | `'…'`, with `'` written as `'\''` | `[A-Za-z0-9_./:@%+,=-]+`, not starting with `=` (zsh EQUALS), and not containing `==` or `:=` (zsh MAGIC_EQUAL_SUBST expands `a==ls` to `a=/bin/ls`) |
+| fish | `'…'`, with `\` and `'` backslash-escaped | `[A-Za-z0-9_./:@%+,=-]+`, and not starting with `%` (fish 4.9 still expands `%self` to its PID) |
 | pwsh | `'…'`, doubling `'` and U+2018 to U+201B | argument position only, and only `-{0,2}[A-Za-z][A-Za-z0-9_-]*` |
 
 `$HOME` is written `"$HOME"'/suffix'` in bash, zsh, and fish, and `(Join-Path $HOME 'suffix')` in pwsh. In pwsh, expression positions are always quoted, because `$env:X = -n` is a parse error.
