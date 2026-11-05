@@ -88,6 +88,7 @@ fn release(archive_ext: &str, pack: impl Fn(&Path, &Path), tamper: bool) -> Rele
     Release { _tmp: tmp, dir, work, archive }
 }
 
+#[cfg(unix)]
 fn tarball(stage: &Path, archive: &Path) {
     fs::copy(env!("CARGO_BIN_EXE_alias-deck"), stage.join("alias-deck")).unwrap();
     fs::copy(root().join("LICENSE"), stage.join("LICENSE")).unwrap();
@@ -187,6 +188,21 @@ fn zip_with(pwsh: &Path) -> impl Fn(&Path, &Path) + '_ {
     }
 }
 
+/// pwsh's error view colors and wraps the message, with a `|` gutter on each continuation line.
+fn unwrapped(text: &str) -> String {
+    let mut out = String::new();
+    let mut escape = false;
+    for c in text.chars() {
+        match c {
+            '\x1b' => escape = true,
+            'm' if escape => escape = false,
+            _ if escape || c.is_whitespace() || c == '|' => {}
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn run_ps1(pwsh: &Path, rel: &Release, url: &str) -> (Output, PathBuf) {
     let dest = rel.work.join("bin");
     let out = Command::new(pwsh)
@@ -228,6 +244,7 @@ fn install_ps1_refuses_an_archive_whose_checksum_does_not_match() {
     show("install.ps1 with a tampered SHA256SUMS", &out);
     assert!(!out.status.success());
     let all = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-    assert!(all.contains("checksum mismatch") && all.contains("Nothing was installed."), "{all}");
+    assert!(all.contains("checksum mismatch for") && all.contains("Nothing was installed."), "{all}");
+    assert!(unwrapped(&all).contains(&rel.archive), "the refusal names the archive: {all}");
     assert!(!dest.exists());
 }
