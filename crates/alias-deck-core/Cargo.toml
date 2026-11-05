@@ -9,3 +9,9 @@ rust-version.workspace = true
 [dependencies]
 semver.workspace = true
 toml_edit.workspace = true
+
+# A custom main: the binary is both the harness and, through symlinks, its probe executables,
+# and its skip lines for missing shells must always be visible.
+[[test]]
+name = "shells"
+harness = false
