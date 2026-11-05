@@ -17,6 +17,7 @@
 //! `compile`, and each shell's quoting rules have exactly one home.
 
 mod compile;
+mod diff;
 mod document;
 mod lint;
 mod lock;
@@ -30,6 +31,7 @@ mod writer;
 pub use compile::{
     compile, CompileOptions, Compiled, Deck, EntryReport, FishAliasStyle, Note, OmitReason, Outcome, Shell, Target,
 };
+pub use diff::{diff_packs, EntryChange, Located, PackDiff};
 pub use document::{PackDocument, ParseError, ParseErrorKind};
 pub use lint::{lint, Finding, Rule, Severity};
 pub use lock::{CommitId, Lock, LockedPack, Sha256};
