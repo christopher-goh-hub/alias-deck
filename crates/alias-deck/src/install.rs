@@ -188,26 +188,23 @@ pub struct Removed {
     pub report: BuildReport,
 }
 
-/// `query` is a source spelling or a pack name. Store bytes are left alone: they are addressed
-/// by content, so another pack or a later re-add may use them.
+/// The manifest entry a user means by `query`: a source spelling, or a pack name.
+pub fn find_pack(paths: &Paths, installed: &Installed, query: &str) -> Result<ManifestPack, Error> {
+    let packs = installed.manifest.packs();
+    let by_source = Source::parse_with_ref(query).ok().and_then(|s| installed.manifest.find(&s));
+    let by_name = || {
+        packs.iter().find(|mp| match installed.lock.get(&mp.source) {
+            Some(locked) => locked.name.as_str() == query,
+            None => load_pack(paths, installed, mp).is_ok_and(|d| d.pack().meta().name.as_str() == query),
+        })
+    };
+    by_source.or_else(by_name).cloned().ok_or_else(|| Error::NotInDeck(query.to_owned()))
+}
+
+/// Store bytes are left alone: they are addressed by content, so a later re-add may use them.
 pub fn remove(paths: &Paths, query: &str) -> Result<Removed, Error> {
     let mut installed = load_installed(paths)?;
-    let by_source = Source::parse(query).ok().and_then(|s| installed.manifest.find(&s).map(|p| p.source.clone()));
-    let source = match by_source {
-        Some(s) => s,
-        None => installed
-            .manifest
-            .packs()
-            .iter()
-            .find(|mp| {
-                let locked = installed.lock.get(&mp.source).map(|l| l.name.as_str() == query);
-                locked.unwrap_or_else(|| {
-                    load_pack(paths, &installed, mp).is_ok_and(|d| d.pack().meta().name.as_str() == query)
-                })
-            })
-            .map(|mp| mp.source.clone())
-            .ok_or_else(|| Error::NotInDeck(query.to_owned()))?,
-    };
+    let source = find_pack(paths, &installed, query)?.source;
     installed.manifest.remove(&source);
     installed.lock.remove(&source);
     save_installed(paths, &installed)?;
