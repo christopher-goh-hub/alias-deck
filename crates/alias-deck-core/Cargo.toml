@@ -1,0 +1,11 @@
+[package]
+name = "alias-deck-core"
+description = "Pack format, typed model, and shell compiler for alias-deck"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+semver.workspace = true
+toml_edit.workspace = true

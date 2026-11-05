@@ -1,0 +1,14 @@
+[workspace]
+members = ["crates/alias-deck-core", "crates/alias-deck"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.80"
+
+[workspace.dependencies]
+alias-deck-core = { path = "crates/alias-deck-core" }
+semver = "1.0.28"
+toml_edit = { version = "0.22.27", default-features = false, features = ["parse", "display"] }

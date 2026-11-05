@@ -1,0 +1,10 @@
+[package]
+name = "alias-deck"
+description = "Compile shared shell alias packs for bash, zsh, fish, and PowerShell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+alias-deck-core.workspace = true
