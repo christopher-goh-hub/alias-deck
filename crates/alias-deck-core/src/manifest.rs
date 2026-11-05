@@ -65,19 +65,16 @@ impl Manifest {
         self.packs.iter().find(|p| p.source.same_pack(source))
     }
 
-    /// Adds the pack last, so it wins name clashes. A pack already listed keeps its place, takes
-    /// the new ref, and is enabled again.
+    /// Adds the pack last, so it wins name clashes. A pack already listed keeps its place and its
+    /// `enabled` flag, and takes the new ref.
     pub fn upsert(&mut self, source: &Source) {
         let at = self.packs.iter().position(|p| p.source.same_pack(source));
         let tables = self.tables_mut();
         match at.and_then(|i| tables.get_mut(i)) {
-            Some(t) => {
-                match source.reference() {
-                    Some(r) => t["ref"] = value(r.as_str()),
-                    None => drop(t.remove("ref")),
-                }
-                t.remove("enabled");
-            }
+            Some(t) => match source.reference() {
+                Some(r) => t["ref"] = value(r.as_str()),
+                None => drop(t.remove("ref")),
+            },
             None => {
                 let mut t = Table::new();
                 t["source"] = value(source.to_string());
@@ -184,7 +181,7 @@ mod tests {
         assert!(out.contains("source = \"github:alice/dotpacks//git.toml\"   # pinned\n"), "{out}");
         let order: Vec<String> = m.packs().iter().map(|p| p.source.to_string()).collect();
         assert_eq!(order, ["github:alice/dotpacks//git.toml", "~/dotfiles/mine.toml", "github:bob/packs"]);
-        assert!(m.packs().iter().all(|p| p.enabled), "re-adding a pack enables it");
+        assert!(!m.packs()[1].enabled, "re-adding a pack keeps it disabled");
         assert_eq!(m.packs()[2].source.reference().unwrap().as_str(), "main");
 
         assert!(m.remove(&Source::parse("github:alice/dotpacks//git.toml").unwrap()));
