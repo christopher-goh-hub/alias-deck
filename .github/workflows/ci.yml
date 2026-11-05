@@ -63,7 +63,7 @@ jobs:
         run: shellcheck -s sh install.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast
 
   # The release builds static Linux binaries; building one here catches a break before a tag does.
   musl:
