@@ -27,7 +27,7 @@ impl fmt::Display for SourceError {
             SourceError::OptionLike => "a source must not start with `-`",
             SourceError::ContainsNul => "the source contains a NUL byte",
             SourceError::Unrecognized => {
-                "expected ./file.toml, /abs/file.toml, ~/file.toml, github:owner/repo[//path], or git+URL[//path]"
+                "expected ./file.toml, /abs/file.toml, ~/file.toml, C:\\file.toml, github:owner/repo[//path], or git+URL[//path]"
             }
             SourceError::BadUrl => "git URLs must be https://, ssh://, file://, or git@host:path, with no spaces",
             SourceError::BadGithub => "expected github:owner/repo, where owner and repo are plain names",
@@ -179,7 +179,7 @@ impl Source {
             let url = GitUrl::new(url)?;
             return Ok(Source::Git { url, path: RepoPath::new(path.unwrap_or(RepoPath::DEFAULT))?, reference: None });
         }
-        if ["/", "./", "../", "~/"].iter().any(|p| s.starts_with(p)) {
+        if ["/", "./", "../", "~/", ".\\", "..\\", "~\\"].iter().any(|p| s.starts_with(p)) || is_drive_path(s) {
             return Ok(Source::Local(PathBuf::from(s)));
         }
         Err(SourceError::Unrecognized)
@@ -213,6 +213,12 @@ impl Source {
     pub fn same_pack(&self, other: &Source) -> bool {
         self.to_string() == other.to_string()
     }
+}
+
+/// `C:\x.toml` or `C:/x.toml`: an absolute Windows path, which `add .\x.toml` stores.
+fn is_drive_path(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() > 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/')
 }
 
 fn split_path(s: &str) -> (&str, Option<&str>) {
@@ -275,7 +281,9 @@ mod tests {
             git("git+git@host.example:team/r.git//p.toml"),
             ("git@host.example:team/r.git".into(), "p.toml".into(), None)
         );
-        for local in ["./x.toml", "../x.toml", "/abs/x.toml", "~/x.toml"] {
+        for local in
+            ["./x.toml", "../x.toml", "/abs/x.toml", "~/x.toml", r"C:\Users\a\x.toml", "C:/x.toml", r".\x.toml"]
+        {
             assert_eq!(Source::parse(local), Ok(Source::Local(PathBuf::from(local))));
         }
     }

@@ -18,7 +18,7 @@ pub struct World {
 impl World {
     pub fn new() -> World {
         let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = real_path(tmp.path());
         let home = root.join("home");
         fs::create_dir_all(&home).unwrap();
         let paths =
@@ -71,7 +71,27 @@ impl World {
     }
 
     pub fn source(repo: &Path, path: &str) -> String {
-        format!("git+file://{}//{path}", repo.display())
+        format!("git+{}//{path}", file_url(repo))
+    }
+}
+
+/// The path with symlinks resolved, as macOS's `/var` is a link to `/private/var`. Windows gets
+/// no `\\?\` prefix, which git and the shells do not accept.
+pub fn real_path(p: &Path) -> PathBuf {
+    let real = p.canonicalize().unwrap();
+    match real.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        Some(plain) => PathBuf::from(plain),
+        None => real,
+    }
+}
+
+/// `file:///tmp/r` on Unix, `file:///C:/Users/r` on Windows.
+pub fn file_url(p: &Path) -> String {
+    let s = p.to_str().unwrap().replace('\\', "/");
+    if s.starts_with('/') {
+        format!("file://{s}")
+    } else {
+        format!("file:///{s}")
     }
 }
 
@@ -79,8 +99,14 @@ pub fn pack(name: &str, body: &str) -> String {
     format!("format = 1\n[pack]\nname = \"{name}\"\nversion = \"1.0.0\"\nlicense = \"MIT\"\ndescription = \"test pack\"\n{body}")
 }
 
-/// A shell binary to run, or `None` when it is not installed. `ALIAS_DECK_REQUIRE_ALL_SHELLS=1`
-/// turns a missing shell into a failure, as in the core harness.
+/// Whether this run must exercise `name`: it is listed in `ALIAS_DECK_REQUIRE_SHELLS`
+/// (comma-separated), or `ALIAS_DECK_REQUIRE_ALL_SHELLS=1` is set, as in the core harness.
+pub fn shell_required(name: &str) -> bool {
+    let all = std::env::var("ALIAS_DECK_REQUIRE_ALL_SHELLS").is_ok_and(|v| v == "1");
+    all || std::env::var("ALIAS_DECK_REQUIRE_SHELLS").unwrap_or_default().split(',').any(|s| s.trim() == name)
+}
+
+/// A shell binary to run, or `None` when it is not installed and not required.
 pub fn find_shell(name: &str) -> Option<PathBuf> {
     let mut dirs: Vec<PathBuf> =
         std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
@@ -88,12 +114,18 @@ pub fn find_shell(name: &str) -> Option<PathBuf> {
     if let Some(home) = std::env::var_os("HOME") {
         dirs.push(Path::new(&home).join(".local/bin"));
     }
-    let found = dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file());
+    let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    let found = dirs.into_iter().map(|d| d.join(&file)).find(|p| p.is_file() && runs(p));
     if found.is_none() {
-        assert!(std::env::var_os("ALIAS_DECK_REQUIRE_ALL_SHELLS").is_none(), "{name} is required but not installed");
+        assert!(!shell_required(name), "{name} is required but not installed");
         eprintln!("skipped: {name} is not installed");
     }
     found
+}
+
+/// Windows ships `System32\bash.exe`, a WSL launcher that fails without a distribution.
+fn runs(shell: &Path) -> bool {
+    Command::new(shell).arg("--version").output().is_ok_and(|o| o.status.success())
 }
 
 impl World {

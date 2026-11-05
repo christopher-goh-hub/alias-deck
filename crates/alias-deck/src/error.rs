@@ -52,7 +52,7 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::NoHome => f.write_str("$HOME is not set to an absolute path"),
+            Error::NoHome => f.write_str("$HOME (or %USERPROFILE% on Windows) is not set to an absolute path"),
             Error::Io { path, error } => write!(f, "{}: {error}", path.display()),
             Error::Parse { origin, src, errors } => {
                 for (i, e) in errors.iter().enumerate() {

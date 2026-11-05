@@ -106,7 +106,7 @@ pub fn context(paths: &Paths, installed: &Installed, cand: &Candidate) -> Result
     let mut on_path = Vec::new();
     for n in &mine {
         let EntryName::Command(cmd) = n else { continue };
-        if let Some(found) = search.iter().map(|d| d.join(cmd.as_str())).find(|p| is_executable(p)) {
+        if let Some(found) = search.iter().find_map(|d| executable_in(d, cmd.as_str())) {
             on_path.push((cmd.clone(), found));
         }
     }
@@ -127,14 +127,20 @@ pub fn context(paths: &Paths, installed: &Installed, cand: &Candidate) -> Result
 }
 
 #[cfg(unix)]
-fn is_executable(p: &std::path::Path) -> bool {
+fn executable_in(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    let p = dir.join(name);
+    std::fs::metadata(&p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).then_some(p)
 }
 
+/// Windows finds `git` as `git.exe` through the extensions `PATHEXT` lists.
 #[cfg(not(unix))]
-fn is_executable(p: &std::path::Path) -> bool {
-    p.is_file()
+fn executable_in(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
+    let exts = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+    std::iter::once(String::new())
+        .chain(exts.split(';').filter(|e| !e.is_empty()).map(str::to_owned))
+        .map(|ext| dir.join(format!("{name}{ext}")))
+        .find(|p| p.is_file())
 }
 
 /// Writes the approved bytes to the store, pins them in the lock, lists the pack in the manifest

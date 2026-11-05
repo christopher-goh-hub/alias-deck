@@ -142,9 +142,10 @@ fn parse_args(argv: &[String], allowed: &[&str]) -> Result<Args, String> {
     Ok(args)
 }
 
-/// `$SHELL` names the login shell, which is the one most users want an init file for.
+/// `$SHELL` names the login shell, which is the one most users want an init file for. Windows
+/// sets no `$SHELL` outside Git Bash, and PowerShell is its shell.
 fn detect_shell() -> Option<Shell> {
-    let shell = env::var_os("SHELL")?;
+    let Some(shell) = env::var_os("SHELL") else { return cfg!(windows).then_some(Shell::Pwsh) };
     let name = Path::new(&shell).file_name()?.to_str()?;
     Shell::from_key(name.strip_suffix(".exe").unwrap_or(name))
 }
