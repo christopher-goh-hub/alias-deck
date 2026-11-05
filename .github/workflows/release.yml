@@ -1,0 +1,116 @@
+name: Release
+
+# A tag v<version> builds every target and publishes a GitHub release with the archives and one
+# SHA256SUMS file, which install.sh and install.ps1 verify against. A manual run builds and
+# uploads the archives as workflow artifacts but publishes nothing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners for both Linux targets, so musl needs no cross toolchain or zig.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            runs: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            runs: true
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            runs: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            runs: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            runs: true
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the crate version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --target "$TARGET"
+          rustup default stable
+      - name: Install musl tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+      - name: Build
+        run: cargo build --release --locked -p alias-deck --target "$TARGET"
+      - name: Smoke test
+        if: matrix.runs
+        run: |
+          "target/$TARGET/release/alias-deck" --version
+          if [ "$RUNNER_OS" = Linux ]; then
+            file "target/$TARGET/release/alias-deck" | tee /dev/stderr | grep -Eq 'statically linked|static-pie linked'
+          fi
+      - name: Package (tar.gz)
+        if: runner.os != 'Windows'
+        run: |
+          name="alias-deck-$VERSION-$TARGET"
+          mkdir -p dist stage
+          cp "target/$TARGET/release/alias-deck" LICENSE README.md stage/
+          tar -C stage -czf "dist/$name.tar.gz" alias-deck LICENSE README.md
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "alias-deck-$env:VERSION-$env:TARGET"
+          New-Item -ItemType Directory -Force dist, stage | Out-Null
+          Copy-Item "target/$env:TARGET/release/alias-deck.exe", LICENSE, README.md stage/
+          Compress-Archive -Path stage/* -DestinationPath "dist/$name.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
