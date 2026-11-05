@@ -281,6 +281,7 @@ fn run_update(paths: &Paths, args: &Args) -> ExitCode {
                             new.findings.clone()
                         }
                         Some(old) => {
+                            context(paths, &installed, &new)?;
                             let diff = diff_packs(old.pack(), new.doc.pack());
                             let locked = installed.lock.get(&mp.source);
                             print!("{}", render::update(old, &new, locked.map(|l| &l.commit), &diff));

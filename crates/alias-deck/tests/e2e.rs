@@ -159,6 +159,17 @@ fn update_yes_refuses_a_new_danger_finding_without_allow() {
 }
 
 #[test]
+fn update_refuses_a_rename_onto_another_packs_name() {
+    let (w, repo, _) = installed();
+    let other = w.repo("other", &[("p.toml", &pack("other", ""))]);
+    ok(&cli(&w, &["add", &World::source(&other, "p.toml"), "--yes"]));
+    w.commit(&repo, &[("tools.toml", &pack("other", TOOLS))], "rename");
+    let out = cli(&w, &["update", "tools", "--yes"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(text(&out.stderr).contains("a pack named `other` is already in your deck"), "{}", text(&out.stderr));
+}
+
+#[test]
 fn tampering_with_the_store_fails_the_build() {
     let (w, _, _) = installed();
     let good = fs::read(w.paths.init(Shell::Zsh)).unwrap();
@@ -246,7 +257,7 @@ fn remove_by_name_and_list() {
 /// because `security` finds the login keychain through it; `-f` keeps zsh from reading any rc file.
 #[test]
 fn a_keychain_secret_reaches_a_sourced_zsh() {
-    if std::env::var_os("ALIAS_DECK_TEST_KEYCHAIN").is_none() || !cfg!(target_os = "macos") {
+    if std::env::var("ALIAS_DECK_TEST_KEYCHAIN").as_deref() != Ok("1") || !cfg!(target_os = "macos") {
         eprintln!("skipped: set ALIAS_DECK_TEST_KEYCHAIN=1 on macOS to run the keychain test");
         return;
     }
