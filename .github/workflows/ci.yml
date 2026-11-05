@@ -58,6 +58,9 @@ jobs:
         run: |
           for s in bash zsh fish pwsh; do printf '%s: ' "$s"; command -v "$s" || echo "not installed"; done
           /bin/bash --version | head -n 1 || true
+      - name: shellcheck install.sh
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
