@@ -2,7 +2,7 @@
 # target: zsh on macos
 # pack: devkit 0.3.0
 
-if __alias_deck_v=$(/usr/bin/security find-generic-password -s alias-deck -a github-token -w 2>/dev/null) && [ -n "$__alias_deck_v" ]; then export GITHUB_TOKEN="$__alias_deck_v"; fi
+if __alias_deck_v=$(command /usr/bin/security find-generic-password -s alias-deck -a github-token -w 2>/dev/null) && [ -n "$__alias_deck_v" ]; then export GITHUB_TOKEN="$__alias_deck_v"; fi
 unset __alias_deck_v
 
 export EDITOR=nvim

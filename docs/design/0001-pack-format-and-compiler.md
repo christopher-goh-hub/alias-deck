@@ -109,6 +109,8 @@ Function bodies are emitted as quoted literals and evaluated when the function i
 
 A hostile body that closes its own wrapper ran at source time in 5 of 5 shells with verbatim bodies, and in 0 of 5 with these templates. Sourcing the compiled file never runs pack code, and one broken body cannot break shell startup. bash and zsh use `function NAME {` and run `unalias NAME` first, because an existing alias would expand inside `NAME() {`.
 
+A pack name that matches a command the compiled file itself runs is `Omitted(ReservedName)`. Those are `alias`, `unalias`, `eval`, `export`, `unset`, and `command` in bash and zsh, plus `emulate` in zsh. In fish they are `abbr` and `contains`. In pwsh they are `Get-Command`, `Join-Path`, `Remove-Alias`, `Set-Alias`, and `Write-Warning`. Without this, a pack `alias unalias=...` or `alias export=...` runs its program at source time on a later line, or on the next source (measured in bash 3.2 and zsh 5.9).
+
 ### Quoting (measured byte for byte in bash 3.2, bash 5.3, zsh 5.9, fish 4.9, pwsh 7.6)
 
 | Shell | Literal | Bare when |
@@ -139,7 +141,7 @@ A pack only declares that it needs a secret. The user's `Bindings` decide where 
 | file | `/bin/cat -- PATH` |
 | command | the user's own argv |
 
-Every shell wraps the lookup the same way. The variable is set only if the command exits 0 and prints something, trailing newlines are removed, and nothing is printed on failure. An unbound secret is `Omitted(SecretUnbound)`, which the GUI shows as a to-do. The value never appears in a pack, the model, or the compiled file. The compiled file has no runtime dependency on alias-deck, so it runs on a bare server.
+Every shell wraps the lookup the same way. The variable is set only if the command exits 0 and prints something, trailing newlines are removed, and nothing is printed on failure. The lookup runs through `command` (pwsh: `Get-Command -CommandType Application`), so a pack alias or function named after the lookup program cannot stand in for it when the file is sourced a second time. fish needs a `command -q` check first, because it prints "Unknown command" for a missing program despite `2>/dev/null`. pwsh needs an explicit `TrimEnd`, because `-join` keeps one newline when the output ends in a blank line. An unbound secret is `Omitted(SecretUnbound)`, which the GUI shows as a to-do. The value never appears in a pack, the model, or the compiled file. The compiled file has no runtime dependency on alias-deck, so it runs on a bare server.
 
 ## Tradeoffs accepted
 

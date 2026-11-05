@@ -86,6 +86,28 @@ fn reserved_names_are_per_shell() {
 }
 
 #[test]
+fn names_the_compiled_file_calls_are_reserved() {
+    let p = pack(
+        "p",
+        "[groups.g.aliases]\nunalias = \"git a\"\nexport = \"git b\"\ncontains = \"git c\"\nJoin-Path = \"git d\"\n",
+    );
+    let expect = [
+        (Shell::Bash, ["unalias", "export"].as_slice()),
+        (Shell::Zsh, &["unalias", "export"]),
+        (Shell::Fish, &["contains"]),
+        (Shell::Pwsh, &["Join-Path"]),
+    ];
+    for (shell, reserved) in expect {
+        let c = build(vec![p.clone()], "", shell, Os::Linux);
+        for r in &c.entries {
+            let name = r.entry.name.to_string();
+            let want = reserved.contains(&name.as_str());
+            assert_eq!(r.outcome.is_omitted(), want, "{shell}: {name} reserved = {want}");
+        }
+    }
+}
+
+#[test]
 fn in_shell_bodies_pick_the_most_specific_dialect() {
     let p = pack("p", "[groups.g.functions.f]\nshell.posix = \"echo posix\"\nshell.zsh = \"echo zsh\"\n");
     assert!(build(vec![p.clone()], "", Shell::Bash, Os::Linux).source.contains("eval 'echo posix'"));
@@ -133,8 +155,8 @@ fn secrets_run_first_then_env_then_commands_whatever_the_file_order() {
         "[groups.a.aliases]\nx = \"git\"\n[groups.b.env]\nPATH = { prepend = [\"/evil\"] }\nT = { secret = \"t\" }\n",
     );
     for shell in Shell::ALL {
-        let s = build(vec![p.clone()], "T = { command = [\"op\", \"read\"] }", shell, Os::Linux).source;
-        let (secret, path, alias) = (s.find("op read").unwrap(), s.find("/evil").unwrap(), s.find(" x").unwrap());
+        let s = build(vec![p.clone()], "T = { command = [\"lookup-tool\"] }", shell, Os::Linux).source;
+        let (secret, path, alias) = (s.find("lookup-tool").unwrap(), s.find("/evil").unwrap(), s.find(" x").unwrap());
         assert!(secret < path && path < alias, "{shell}: secret, then PATH, then commands\n{s}");
     }
 }

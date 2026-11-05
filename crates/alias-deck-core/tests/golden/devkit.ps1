@@ -6,7 +6,7 @@ if ($PSVersionTable.PSVersion -lt [version]'7.3') {
     return
 }
 
-& { try { $v = ((& '/usr/bin/security' find-generic-password -s alias-deck -a github-token -w 2>$null) -join "`n").TrimEnd("`n"); if ($LASTEXITCODE -eq 0 -and $v) { $env:GITHUB_TOKEN = $v } } catch {} }
+& { try { $v = ((& (Get-Command -Name '/usr/bin/security' -CommandType Application -TotalCount 1 -ErrorAction Stop) find-generic-password -s alias-deck -a github-token -w 2>$null) -join "`n").TrimEnd("`n"); if ($LASTEXITCODE -eq 0 -and $v) { $env:GITHUB_TOKEN = $v } } catch {} }
 
 $env:EDITOR = 'nvim'
 $env:FZF_DEFAULT_OPTS = '--height 40% --layout=reverse --bind ''ctrl-y:execute-silent(echo -n {} | pbcopy)'' --prompt=''❯ '''

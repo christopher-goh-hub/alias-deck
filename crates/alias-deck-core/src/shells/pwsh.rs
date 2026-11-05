@@ -7,47 +7,16 @@ use crate::writer::{Quoting, Writer};
 
 pub(crate) struct Pwsh;
 
+#[rustfmt::skip]
 const KEYWORDS: &[&str] = &[
-    "begin",
-    "break",
-    "catch",
-    "class",
-    "clean",
-    "continue",
-    "data",
-    "define",
-    "do",
-    "dynamicparam",
-    "else",
-    "elseif",
-    "end",
-    "enum",
-    "exit",
-    "filter",
-    "finally",
-    "for",
-    "foreach",
-    "from",
-    "function",
-    "hidden",
-    "if",
-    "in",
-    "inlinescript",
-    "parallel",
-    "param",
-    "process",
-    "return",
-    "sequence",
-    "switch",
-    "throw",
-    "trap",
-    "try",
-    "until",
-    "using",
-    "var",
-    "while",
-    "workflow",
+    "begin", "break", "catch", "class", "clean", "continue", "data", "define", "do", "dynamicparam", "else",
+    "elseif", "end", "enum", "exit", "filter", "finally", "for", "foreach", "from", "function", "hidden", "if", "in",
+    "inlinescript", "parallel", "param", "process", "return", "sequence", "switch", "throw", "trap", "try", "until",
+    "using", "var", "while", "workflow",
 ];
+/// Commands the compiled file itself runs. A pack function with one of these names would run
+/// pack code at source time.
+const CALLED: &[&str] = &["get-command", "join-path", "remove-alias", "set-alias", "write-warning"];
 
 /// A one-word alias keeps pwsh's native argument passing as `Set-Alias`. A self-referential
 /// one would resolve to itself, so it goes through a function.
@@ -87,7 +56,8 @@ impl Backend for Pwsh {
     }
 
     fn is_reserved(&self, name: &CommandName) -> bool {
-        KEYWORDS.contains(&name.as_str().to_ascii_lowercase().as_str())
+        let n = name.as_str().to_ascii_lowercase();
+        KEYWORDS.contains(&n.as_str()) || CALLED.contains(&n.as_str())
     }
 
     fn command_key(&self, name: &CommandName) -> String {
@@ -120,7 +90,8 @@ impl Backend for Pwsh {
     fn render(&self, w: &mut Writer, item: &Item<'_>, _options: &CompileOptions) {
         match item {
             Item::Secret { name, lookup } => {
-                w.code("& { try { $v = ((& ").arg(lookup.program());
+                w.code("& { try { $v = ((& (Get-Command -Name ").arg(lookup.program());
+                w.code(" -CommandType Application -TotalCount 1 -ErrorAction Stop)");
                 call_args(w, lookup);
                 w.code(" 2>$null) -join \"`n\").TrimEnd(\"`n\"); if ($LASTEXITCODE -eq 0 -and $v) { $env:");
                 w.name(*name).code(" = $v } } catch {} }\n");

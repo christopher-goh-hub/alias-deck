@@ -17,10 +17,13 @@ const KEYWORDS: &[&str] = &[
     "case", "coproc", "do", "done", "elif", "else", "esac", "fi", "for", "function", "if", "in", "select", "then",
     "time", "until", "while",
 ];
+/// Commands the compiled file itself runs. A pack alias or function with one of these names
+/// would run pack code at source time on a later line, or when the file is sourced again.
+const CALLED: &[&str] = &["alias", "command", "eval", "export", "unalias", "unset"];
 #[rustfmt::skip]
 const ZSH_KEYWORDS: &[&str] = &[
     "declare", "end", "export", "float", "foreach", "integer", "local", "nocorrect", "noglob", "readonly",
-    "repeat", "typeset",
+    "repeat", "typeset", "emulate",
 ];
 
 impl Backend for Posix {
@@ -37,7 +40,8 @@ impl Backend for Posix {
     }
 
     fn is_reserved(&self, name: &CommandName) -> bool {
-        KEYWORDS.contains(&name.as_str()) || (self.zsh && ZSH_KEYWORDS.contains(&name.as_str()))
+        let n = name.as_str();
+        KEYWORDS.contains(&n) || CALLED.contains(&n) || (self.zsh && ZSH_KEYWORDS.contains(&n))
     }
 
     fn header(&self, w: &mut Writer, target: Target, packs: &[&PackMeta]) {
@@ -46,8 +50,9 @@ impl Backend for Posix {
 
     fn render(&self, w: &mut Writer, item: &Item<'_>, _options: &CompileOptions) {
         match item {
+            // `command` skips aliases and functions, so a pack cannot stand in for the lookup.
             Item::Secret { name, lookup } => {
-                w.code("if __alias_deck_v=$(").arg(lookup.program());
+                w.code("if __alias_deck_v=$(command ").arg(lookup.program());
                 for a in lookup.args() {
                     w.code(" ").arg(a);
                 }

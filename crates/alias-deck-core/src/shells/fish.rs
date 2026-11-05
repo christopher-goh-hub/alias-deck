@@ -7,11 +7,13 @@ use crate::writer::{Quoting, Writer};
 
 pub(crate) struct Fish;
 
-/// fish 4.9 refuses `function NAME; end` for each of these (measured).
+/// fish 4.9 refuses `function NAME; end` for each of these (measured), plus `abbr` and
+/// `contains`, which the compiled file itself runs.
+#[rustfmt::skip]
 const RESERVED: &[&str] = &[
-    "_", "and", "argparse", "begin", "break", "builtin", "case", "command", "continue", "else", "end", "eval", "exec",
-    "for", "function", "if", "not", "or", "read", "return", "set", "status", "string", "switch", "test", "time",
-    "while",
+    "_", "abbr", "and", "argparse", "begin", "break", "builtin", "case", "command", "contains", "continue", "else",
+    "end", "eval", "exec", "for", "function", "if", "not", "or", "read", "return", "set", "status", "string",
+    "switch", "test", "time", "while",
 ];
 
 fn argv_words(w: &mut Writer, argv: &Argv) {
@@ -48,8 +50,10 @@ impl Backend for Fish {
 
     fn render(&self, w: &mut Writer, item: &Item<'_>, options: &CompileOptions) {
         match item {
+            // `command -q` first: fish prints "Unknown command" despite `2>/dev/null`.
             Item::Secret { name, lookup } => {
-                w.code("begin\n    set -l __alias_deck_v \"$(");
+                w.code("begin\n    command -q ").arg(lookup.program());
+                w.code("\n    and set -l __alias_deck_v \"$(command ");
                 argv_words(w, lookup);
                 w.code(" 2>/dev/null)\"\n    and test -n \"$__alias_deck_v\"\n    and set -gx ").name(*name);
                 w.code(" \"$__alias_deck_v\"\nend\n");

@@ -3,7 +3,8 @@
 # pack: devkit 0.3.0
 
 begin
-    set -l __alias_deck_v "$(/usr/bin/security find-generic-password -s alias-deck -a github-token -w 2>/dev/null)"
+    command -q /usr/bin/security
+    and set -l __alias_deck_v "$(command /usr/bin/security find-generic-password -s alias-deck -a github-token -w 2>/dev/null)"
     and test -n "$__alias_deck_v"
     and set -gx GITHUB_TOKEN "$__alias_deck_v"
 end
