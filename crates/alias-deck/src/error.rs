@@ -34,6 +34,11 @@ pub enum Error {
         source: Source,
     },
     NotInDeck(String),
+    /// No registry the deck consults lists this name.
+    NotInRegistry {
+        name: String,
+        searched: Vec<Source>,
+    },
     NameTaken {
         name: Slug,
         source: Source,
@@ -75,6 +80,14 @@ impl fmt::Display for Error {
                 write!(f, "{source} is in your deck but was never approved; run `alias-deck update` to review it")
             }
             Error::NotInDeck(what) => write!(f, "no pack named or sourced `{what}` in your deck"),
+            Error::NotInRegistry { name, searched } => {
+                let searched: Vec<String> = searched.iter().map(Source::to_string).collect();
+                write!(
+                    f,
+                    "no registry lists a pack named `{name}` (searched: {}); try `alias-deck search {name}`",
+                    searched.join(", ")
+                )
+            }
             Error::NameTaken { name, source } => {
                 write!(f, "a pack named `{}` is already in your deck from {source}", name.as_str())
             }

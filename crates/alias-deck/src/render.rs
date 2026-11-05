@@ -3,7 +3,9 @@
 
 use std::fmt::Write as _;
 
-use alias_deck::{Candidate, Context, ListedPack};
+use std::time::Duration;
+
+use alias_deck::{Candidate, Context, ListedPack, Registries, Registry};
 use alias_deck_core::{
     Argv, CommitId, Compiled, Entry, EntryChange, EnvValue, Finding, FunctionBody, Group, Note, OsSet, Outcome,
     PackDiff, PackDocument, Severity, Shell, Word,
@@ -130,11 +132,20 @@ fn source_lines(out: &mut String, cand: &Candidate) {
     let _ = writeln!(out, "  sha256: {}", cand.sha256);
 }
 
-/// Everything the pack adds, before anything is written.
-pub fn preview(cand: &Candidate, ctx: &Context) -> String {
+/// Everything the pack adds, before anything is written. `via` is the registry that turned the
+/// name the user typed into this source.
+pub fn preview(cand: &Candidate, ctx: &Context, via: Option<&Registry>) -> String {
     let mut out = String::new();
     header(&mut out, &cand.doc);
     source_lines(&mut out, cand);
+    if let Some(r) = via {
+        let _ = writeln!(
+            out,
+            "  listed in: {} (commit {}). A listing is not a review: read what follows.",
+            visible(&r.source.to_string()),
+            r.commit.short()
+        );
+    }
     let pack = cand.doc.pack();
     let section = |out: &mut String, title: &str, keep: fn(&Entry) -> bool| {
         let entries: Vec<(&Group, &Entry)> = pack.entries().filter(|(_, e)| keep(e)).collect();
@@ -167,6 +178,67 @@ pub fn preview(cand: &Candidate, ctx: &Context) -> String {
         }
     }
     findings_section(&mut out, &cand.findings);
+    out
+}
+
+/// `3 hours ago`, rounded down to the largest whole unit.
+fn ago(d: Duration) -> String {
+    let s = d.as_secs();
+    let (n, unit) = match s {
+        0..=59 => return "just now".to_owned(),
+        60..=3599 => (s / 60, "minute"),
+        3600..=86_399 => (s / 3600, "hour"),
+        _ => (s / 86_400, "day"),
+    };
+    format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" })
+}
+
+/// Registries that could not be read, or that came from an old cache because a fetch failed.
+pub fn registry_notes(registries: &Registries) -> String {
+    let mut out = String::new();
+    for (source, e) in &registries.failed {
+        let _ = writeln!(out, "alias-deck: cannot read registry {source}: {}", e.to_string().replace('\n', "; "));
+    }
+    for r in registries.loaded.iter().filter(|r| r.stale.is_some()) {
+        let why = r.stale.as_deref().unwrap_or_default().replace('\n', "; ");
+        let _ = writeln!(
+            out,
+            "alias-deck: note: using the copy of {} cached {} (commit {}), because fetching it failed: {why}",
+            r.source,
+            ago(r.age),
+            r.commit.short()
+        );
+    }
+    out
+}
+
+/// Each matching pack with its description, tags, and source, then where the list came from.
+pub fn search(registries: &Registries, term: &str) -> String {
+    let mut out = String::new();
+    let found = registries.search(term);
+    if found.is_empty() {
+        let _ = writeln!(out, "No packs match `{}`.", visible(term));
+    }
+    let width = found.iter().map(|f| f.entry.name.as_str().len()).max().unwrap_or(0);
+    for f in &found {
+        let e = f.entry;
+        let _ = writeln!(out, "{:<width$}  {}", e.name.as_str(), visible(e.description.as_str()));
+        let indent = " ".repeat(width + 2);
+        if !e.tags.is_empty() {
+            let tags: Vec<&str> = e.tags.iter().map(|t| t.as_str()).collect();
+            let _ = writeln!(out, "{indent}tags: {}", tags.join(", "));
+        }
+        let _ = writeln!(out, "{indent}source: {}", visible(&e.source.to_string()));
+    }
+    out.push('\n');
+    for r in &registries.loaded {
+        let when = if r.age.is_zero() { "fetched just now".to_owned() } else { format!("fetched {}", ago(r.age)) };
+        let _ = writeln!(out, "From {} at commit {}, {when}.", visible(&r.source.to_string()), r.commit.short());
+    }
+    if !found.is_empty() {
+        let _ =
+            writeln!(out, "Install one with `alias-deck add <name>`. You see everything it adds before it installs.");
+    }
     out
 }
 
