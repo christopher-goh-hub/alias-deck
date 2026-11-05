@@ -34,7 +34,10 @@ fn compiles_to_stdout_and_reports_omissions_on_stderr() {
         "{stderr}"
     );
     assert!(stderr.contains("alias-deck: devkit/toolchain/GITHUB_TOKEN: omitted: secret is not bound"), "{stderr}");
-    assert!(stderr.contains("devkit/git/gs: note: pwsh rewrites"), "{stderr}");
+    let notes: Vec<&str> = stderr.lines().filter(|l| l.contains("note:")).collect();
+    assert_eq!(notes.len(), 1, "one summary line, not one per entry: {stderr}");
+    assert!(notes[0].starts_with("alias-deck: note: pwsh rewrites some caller arguments"), "{stderr}");
+    assert!(notes[0].ends_with(": devkit/git/gs, devkit/git/gp, devkit/git/glog, devkit/git/wip, devkit/git/gcm, devkit/nav/.., devkit/nav/grep, devkit/nav/dots, devkit/macos/flushdns"), "{stderr}");
     assert!(!stdout.contains("omitted"), "reports stay off stdout");
 }
 
@@ -99,12 +102,45 @@ fn later_packs_win() {
 #[test]
 fn help_exits_zero() {
     let out = run(&["compile", "--help"], None);
-    assert!(out.status.success() && text(&out.stdout).starts_with("usage: alias-deck compile"));
+    assert!(out.status.success() && text(&out.stdout).starts_with("usage: alias-deck <command>"));
 }
 
 #[test]
 fn usage_errors() {
-    for args in [&["compile"][..], &["compile", "x.toml", "--shell", "ksh"], &["compile", "x.toml", "--bogus"], &[]] {
+    for args in [
+        &["compile"][..],
+        &["compile", "x.toml", "--shell", "ksh"],
+        &["compile", "x.toml", "--bogus"],
+        &[],
+        &["frobnicate"],
+        &["add"],
+        &["add", "--upload-pack=evil"],
+        &["add", "github:a/b", "--allow", "no-such-rule"],
+        &["remove", "a", "b"],
+        &["setup", "--yes"],
+    ] {
         assert_eq!(run(args, None).status.code(), Some(2), "{args:?}");
     }
+}
+
+#[test]
+fn lint_prints_findings_and_fails_on_danger() {
+    let dir = std::env::temp_dir().join(format!("alias-deck-cli-lint-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let risky = dir.join("risky.toml");
+    std::fs::write(
+        &risky,
+        "format = 1\n[pack]\nname = \"p\"\nversion = \"1.0.0\"\nlicense = \"MIT\"\ndescription = \"d\"\n[groups.g.env]\nLD_PRELOAD = \"/x.so\"\n",
+    )
+    .unwrap();
+    let out = run(&["lint", risky.to_str().unwrap()], None);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        text(&out.stdout).contains("danger env-loader-hijack  p/g/LD_PRELOAD: sets LD_PRELOAD"),
+        "{}",
+        text(&out.stdout)
+    );
+    let out = run(&["lint", "examples/devkit.toml"], None);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(text(&out.stdout).contains("info   shadows-core"));
 }
