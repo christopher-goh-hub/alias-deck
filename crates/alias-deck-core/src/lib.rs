@@ -23,6 +23,7 @@ mod lint;
 mod lock;
 mod manifest;
 mod model;
+mod registry;
 mod secrets;
 mod shells;
 mod source;
@@ -35,10 +36,11 @@ pub use diff::{diff_packs, EntryChange, Located, PackDiff};
 pub use document::{PackDocument, ParseError, ParseErrorKind};
 pub use lint::{lint, Finding, Rule, Severity};
 pub use lock::{CommitId, Lock, LockedPack, Sha256};
-pub use manifest::{Manifest, ManifestPack};
+pub use manifest::{Manifest, ManifestPack, DEFAULT_REGISTRY, DEFAULT_REGISTRY_REF};
 pub use model::{
     Alias, Argv, CommandName, Dialect, Entry, EntryName, EntryRef, EnvEntry, EnvName, EnvValue, Function, FunctionBody,
     Group, InShell, InvalidValue, Os, OsSet, Pack, PackMeta, Slug, Text, Word,
 };
+pub use registry::{RegistryEntry, RegistryIndex};
 pub use secrets::{Bindings, SecretSource};
 pub use source::{GitRef, GitUrl, RepoPath, Source, SourceError};
