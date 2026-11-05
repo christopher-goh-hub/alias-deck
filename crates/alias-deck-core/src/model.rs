@@ -162,6 +162,16 @@ impl Word {
     }
 }
 
+/// The spelling a pack uses: `~/go` for a home word.
+impl fmt::Display for Word {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Word::Literal(t) => f.write_str(t.as_str()),
+            Word::Home(t) => write!(f, "~{t}"),
+        }
+    }
+}
+
 /// A program plus fixed leading arguments. Aliases are data, not code, so lint can read the
 /// program and every shell passes the same argv.
 #[derive(Debug, Clone, PartialEq, Eq)]

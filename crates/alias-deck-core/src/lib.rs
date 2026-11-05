@@ -18,6 +18,7 @@
 
 mod compile;
 mod document;
+mod lint;
 mod model;
 mod secrets;
 mod shells;
@@ -27,6 +28,7 @@ pub use compile::{
     compile, CompileOptions, Compiled, Deck, EntryReport, FishAliasStyle, Note, OmitReason, Outcome, Shell, Target,
 };
 pub use document::{PackDocument, ParseError, ParseErrorKind};
+pub use lint::{lint, Finding, Rule, Severity};
 pub use model::{
     Alias, Argv, CommandName, Dialect, Entry, EntryName, EntryRef, EnvEntry, EnvName, EnvValue, Function, FunctionBody,
     Group, InShell, InvalidValue, Os, OsSet, Pack, PackMeta, Slug, Text, Word,
