@@ -234,17 +234,52 @@ mod tests {
 
     #[test]
     fn home_words() {
-        assert_eq!(render(Quoting::Posix, |w| drop(w.arg(&word("~")))), r#""$HOME""#);
-        assert_eq!(render(Quoting::Fish, |w| drop(w.arg(&word("~/a b")))), r#""$HOME"'/a b'"#);
-        assert_eq!(render(Quoting::Pwsh, |w| drop(w.expr(&word("~/go")))), "(Join-Path $HOME 'go')");
-        assert_eq!(render(Quoting::Pwsh, |w| drop(w.arg(&word("~/")))), "(Join-Path $HOME '')");
-        assert_eq!(render(Quoting::Pwsh, |w| drop(w.arg(&word("~")))), "$HOME");
+        assert_eq!(
+            render(Quoting::Posix, |w| {
+                w.arg(&word("~"));
+            }),
+            r#""$HOME""#
+        );
+        assert_eq!(
+            render(Quoting::Fish, |w| {
+                w.arg(&word("~/a b"));
+            }),
+            r#""$HOME"'/a b'"#
+        );
+        assert_eq!(
+            render(Quoting::Pwsh, |w| {
+                w.expr(&word("~/go"));
+            }),
+            "(Join-Path $HOME 'go')"
+        );
+        assert_eq!(
+            render(Quoting::Pwsh, |w| {
+                w.arg(&word("~/"));
+            }),
+            "(Join-Path $HOME '')"
+        );
+        assert_eq!(
+            render(Quoting::Pwsh, |w| {
+                w.arg(&word("~"));
+            }),
+            "$HOME"
+        );
     }
 
     #[test]
     fn pwsh_quotes_by_position() {
-        assert_eq!(render(Quoting::Pwsh, |w| drop(w.arg(&word("-n")))), "-n");
-        assert_eq!(render(Quoting::Pwsh, |w| drop(w.expr(&word("-n")))), "'-n'");
+        assert_eq!(
+            render(Quoting::Pwsh, |w| {
+                w.arg(&word("-n"));
+            }),
+            "-n"
+        );
+        assert_eq!(
+            render(Quoting::Pwsh, |w| {
+                w.expr(&word("-n"));
+            }),
+            "'-n'"
+        );
     }
 
     #[test]
@@ -256,7 +291,11 @@ mod tests {
             });
         });
         assert_eq!(posix, r#"alias x='git -m '\''wip: don'\''\'\'''\''t merge! "$USER" `draft` \o/ 100%'\'''"#);
-        let fish = render(Quoting::Fish, |w| drop(w.nested(|w| drop(w.arg(&word(msg))))));
+        let fish = render(Quoting::Fish, |w| {
+            w.nested(|w| {
+                w.arg(&word(msg));
+            });
+        });
         assert_eq!(fish, r#"'\'wip: don\\\'t merge! "$USER" `draft` \\\\o/ 100%\''"#);
     }
 }

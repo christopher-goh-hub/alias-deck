@@ -1,0 +1,82 @@
+# devkit: everyday git shortcuts, navigation helpers, and toolchain paths.
+#
+# Format 1 at a glance:
+#   aliases    name = "plain words" or ["argv", "words"]. A command prefix, never shell code.
+#   functions  script = POSIX sh run in a child /bin/sh (the same in every shell),
+#              or shell.<dialect> = code that runs inside your shell (cd, export).
+#   env        NAME = "value" | { prepend/append = [paths] } | { secret = "why it is needed" }
+#   A word that is exactly "~" or starts with "~/" means your home directory.
+
+format = 1
+
+[pack]
+name = "devkit"
+version = "0.3.0"
+license = "MIT"
+description = "Everyday git shortcuts, navigation helpers, and toolchain paths."
+requires = ["git"]
+os = ["macos", "linux"]
+
+[groups.git]
+description = "Git shortcuts"
+
+[groups.git.aliases]
+g = "git"                 # one word: a Set-Alias in PowerShell, so native argument passing stays exact
+gs = "git status -sb"
+gp = "git push"           # also a built-in PowerShell alias; the compiled file removes it first
+glog = ["git", "log", "--graph", "--pretty=format:%C(yellow)%h%Creset %s %C(cyan)<%an>%Creset"]
+# A hostile message: quotes of every kind, $, a backtick, !, %, a backslash, and a newline.
+wip = ["git", "commit", "--no-verify", "-m", '''WIP: don't merge ‘yet’ — "$USER" `whoami` 100%! \o/
+Co-authored-by: Nobody <nobody@example.com>''']
+
+[groups.git.functions.gcm]
+description = "Commit all tracked changes with the arguments as the message"
+script = '''
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' "usage: $0 <message...>" >&2
+  exit 2
+fi
+exec git commit -a -m "$*"
+'''
+
+[groups.git.functions.groot]
+description = "cd to the top of the current git repository"
+# It changes your directory, so it needs in-shell bodies. With no pwsh body,
+# PowerShell output leaves it out and the report says so.
+shell.posix = 'cd -- "$(git rev-parse --show-toplevel)"'
+shell.fish = 'cd -- (git rev-parse --show-toplevel)'
+
+[groups.nav]
+description = "Navigation"
+
+[groups.nav.aliases]
+".." = "cd .."
+grep = "grep --color=auto"   # refers to itself; fish and pwsh call the external grep
+dots = "cd ~/.dotfiles"
+
+[groups.nav.functions.mkcd]
+description = "Create a directory, with parents, and cd into it"
+shell.posix = 'mkdir -p -- "$1" && cd -- "$1"'
+shell.fish = 'mkdir -p -- $argv[1]; and cd -- $argv[1]'
+shell.pwsh = '''
+$null = New-Item -ItemType Directory -Force -Path $args[0]
+Set-Location -LiteralPath $args[0]
+'''
+
+[groups.toolchain]
+description = "Editor, fuzzy finder, and language toolchains"
+
+[groups.toolchain.env]
+EDITOR = "nvim"
+FZF_DEFAULT_OPTS = "--height 40% --layout=reverse --bind 'ctrl-y:execute-silent(echo -n {} | pbcopy)' --prompt='❯ '"
+GOPATH = "~/go"
+PATH = { prepend = ["~/.cargo/bin", "~/.local/bin"], append = ["~/go/bin"] }
+GITHUB_TOKEN = { secret = "Personal access token read by gh and the GitHub API" }
+NPM_TOKEN = { secret = "Token for publishing to the npm registry" }
+
+[groups.macos]
+description = "macOS-only helpers"
+os = ["macos"]
+
+[groups.macos.aliases]
+flushdns = "sudo killall -HUP mDNSResponder"

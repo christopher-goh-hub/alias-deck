@@ -1,0 +1,123 @@
+[bash on macos]
+  devkit/git/g: emitted
+  devkit/git/gs: emitted
+  devkit/git/gp: emitted
+  devkit/git/glog: emitted
+  devkit/git/wip: emitted
+  devkit/git/gcm: emitted
+  devkit/git/groot: emitted
+  devkit/nav/..: emitted
+  devkit/nav/grep: emitted
+  devkit/nav/dots: emitted
+  devkit/nav/mkcd: emitted
+  devkit/toolchain/EDITOR: emitted
+  devkit/toolchain/FZF_DEFAULT_OPTS: emitted
+  devkit/toolchain/GOPATH: emitted
+  devkit/toolchain/PATH: emitted
+  devkit/toolchain/GITHUB_TOKEN: emitted
+  devkit/toolchain/NPM_TOKEN: omitted: secret is not bound; add it to your secrets file
+  devkit/macos/flushdns: emitted
+[zsh on macos]
+  devkit/git/g: emitted
+  devkit/git/gs: emitted
+  devkit/git/gp: emitted
+  devkit/git/glog: emitted
+  devkit/git/wip: emitted
+  devkit/git/gcm: emitted
+  devkit/git/groot: emitted
+  devkit/nav/..: emitted
+  devkit/nav/grep: emitted
+  devkit/nav/dots: emitted
+  devkit/nav/mkcd: emitted
+  devkit/toolchain/EDITOR: emitted
+  devkit/toolchain/FZF_DEFAULT_OPTS: emitted
+  devkit/toolchain/GOPATH: emitted
+  devkit/toolchain/PATH: emitted
+  devkit/toolchain/GITHUB_TOKEN: emitted
+  devkit/toolchain/NPM_TOKEN: omitted: secret is not bound; add it to your secrets file
+  devkit/macos/flushdns: emitted
+[fish on macos]
+  devkit/git/g: emitted
+  devkit/git/gs: emitted
+  devkit/git/gp: emitted
+  devkit/git/glog: emitted
+  devkit/git/wip: emitted
+  devkit/git/gcm: emitted
+  devkit/git/groot: emitted
+  devkit/nav/..: emitted
+  devkit/nav/grep: emitted
+  devkit/nav/dots: emitted
+  devkit/nav/mkcd: emitted
+  devkit/toolchain/EDITOR: emitted
+  devkit/toolchain/FZF_DEFAULT_OPTS: emitted
+  devkit/toolchain/GOPATH: emitted
+  devkit/toolchain/PATH: emitted
+  devkit/toolchain/GITHUB_TOKEN: emitted
+  devkit/toolchain/NPM_TOKEN: omitted: secret is not bound; add it to your secrets file
+  devkit/macos/flushdns: emitted
+[pwsh on macos]
+  devkit/git/g: emitted
+  devkit/git/gs: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/git/gp: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/git/glog: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/git/wip: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/git/gcm: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/git/groot: omitted: no body for pwsh (pack has: posix, fish)
+  devkit/nav/..: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/nav/grep: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/nav/dots: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+  devkit/nav/mkcd: emitted
+  devkit/toolchain/EDITOR: emitted
+  devkit/toolchain/FZF_DEFAULT_OPTS: emitted
+  devkit/toolchain/GOPATH: emitted
+  devkit/toolchain/PATH: emitted
+  devkit/toolchain/GITHUB_TOKEN: emitted
+  devkit/toolchain/NPM_TOKEN: omitted: secret is not bound; add it to your secrets file
+  devkit/macos/flushdns: emitted
+    note: pwsh rewrites some caller arguments (a bare --, a,b, -Dx.y, wildcards) before this wrapper sees them
+[bash on linux]
+  devkit/git/g: emitted
+  devkit/git/gs: emitted
+  devkit/git/gp: emitted
+  devkit/git/glog: emitted
+  devkit/git/wip: emitted
+  devkit/git/gcm: emitted
+  devkit/git/groot: emitted
+  devkit/nav/..: emitted
+  devkit/nav/grep: emitted
+  devkit/nav/dots: emitted
+  devkit/nav/mkcd: emitted
+  devkit/toolchain/EDITOR: emitted
+  devkit/toolchain/FZF_DEFAULT_OPTS: emitted
+  devkit/toolchain/GOPATH: emitted
+  devkit/toolchain/PATH: emitted
+  devkit/toolchain/GITHUB_TOKEN: emitted
+  devkit/toolchain/NPM_TOKEN: omitted: secret is not bound; add it to your secrets file
+  devkit/macos/flushdns: omitted: only for macos
+[pwsh on windows]
+  devkit/git/g: omitted: only for macos, linux
+  devkit/git/gs: omitted: only for macos, linux
+  devkit/git/gp: omitted: only for macos, linux
+  devkit/git/glog: omitted: only for macos, linux
+  devkit/git/wip: omitted: only for macos, linux
+  devkit/git/gcm: omitted: only for macos, linux
+  devkit/git/groot: omitted: only for macos, linux
+  devkit/nav/..: omitted: only for macos, linux
+  devkit/nav/grep: omitted: only for macos, linux
+  devkit/nav/dots: omitted: only for macos, linux
+  devkit/nav/mkcd: omitted: only for macos, linux
+  devkit/toolchain/EDITOR: omitted: only for macos, linux
+  devkit/toolchain/FZF_DEFAULT_OPTS: omitted: only for macos, linux
+  devkit/toolchain/GOPATH: omitted: only for macos, linux
+  devkit/toolchain/PATH: omitted: only for macos, linux
+  devkit/toolchain/GITHUB_TOKEN: omitted: only for macos, linux
+  devkit/toolchain/NPM_TOKEN: omitted: only for macos, linux
+  devkit/macos/flushdns: omitted: only for macos
