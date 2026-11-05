@@ -1,0 +1,54 @@
+format = 1
+
+[pack]
+name = "everyday"
+version = "1.0.0"
+license = "MIT"
+description = "Small helpers for every machine: ll and la, PATH one entry per line, listening ports, du of the current directory, and extract for any common archive."
+requires = ["tar", "unzip"]
+
+[groups.files]
+description = "Listing files and disk use"
+os = ["macos", "linux"]
+
+[groups.files.aliases]
+ll = "ls -lhF"
+la = "ls -lhAF"
+dud = "du -h -d 1"
+
+[groups.files.functions.extract]
+description = "Unpack each archive given into the current directory: tar, tgz, tbz2, txz, zst, zip, or gz"
+script = '''
+if [ "$#" -eq 0 ]; then
+  echo "usage: $0 ARCHIVE..." >&2
+  exit 2
+fi
+for f in "$@"; do
+  case $f in
+    *.tar | *.tar.gz | *.tgz | *.tar.bz2 | *.tbz2 | *.tar.xz | *.txz | *.tar.zst) tar -xf "$f" ;;
+    *.zip) unzip -q "$f" ;;
+    *.gz) gunzip -k "$f" ;;
+    *) echo "$0: do not know how to unpack $f" >&2; exit 1 ;;
+  esac || exit
+done
+'''
+
+[groups.env.functions.path]
+description = "Print each PATH entry on its own line"
+shell.posix = 'printf "%s\n" "$PATH" | tr : "\n"'
+shell.fish = 'printf "%s\n" $PATH'
+shell.pwsh = '$env:PATH -split [IO.Path]::PathSeparator'
+
+[groups.ports-macos]
+description = "Listening TCP ports, with lsof"
+os = ["macos"]
+
+[groups.ports-macos.aliases]
+ports = "lsof -nP -iTCP -sTCP:LISTEN"
+
+[groups.ports-linux]
+description = "Listening TCP ports, with ss"
+os = ["linux"]
+
+[groups.ports-linux.aliases]
+ports = "ss -tlnp"

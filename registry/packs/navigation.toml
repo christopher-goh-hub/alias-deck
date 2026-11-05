@@ -1,0 +1,62 @@
+format = 1
+
+[pack]
+name = "navigation"
+version = "1.0.0"
+license = "MIT"
+description = "Move around faster: .. and friends, up N, mkcd to create and enter a directory, and cdtmp for a fresh scratch directory."
+
+[groups.up]
+description = "Climb out of deep directories"
+
+[groups.up.aliases]
+".." = "cd .."
+"..." = "cd ../.."
+"...." = "cd ../../.."
+
+[groups.up.functions.up]
+description = "cd up N directories, default 1: up 3 is cd ../../.."
+shell.posix = '''
+case ${1:-1} in
+  '' | 0 | *[!0-9]*) echo 'usage: up [N]' >&2; return 2 ;;
+esac
+cd -- "$(printf '../%.0s' $(seq "${1:-1}"))"
+'''
+shell.fish = '''
+set -l n 1
+if set -q argv[1]
+    if not string match -qr '^[1-9][0-9]*$' -- $argv[1]
+        echo 'usage: up [N]' >&2
+        return 2
+    end
+    set n $argv[1]
+end
+cd (string repeat -n $n ../)
+'''
+shell.pwsh = '''
+$n = if ($args.Count) { "$($args[0])" } else { '1' }
+if ($n -notmatch '^[1-9][0-9]*$') { Write-Error 'usage: up [N]'; return }
+Set-Location -LiteralPath ('../' * [int]$n)
+'''
+
+[groups.dirs]
+description = "Make directories and go there"
+
+[groups.dirs.functions.mkcd]
+description = "Create a directory, with parents, and cd into it"
+shell.posix = 'mkdir -p -- "$1" && cd -- "$1"'
+shell.fish = 'mkdir -p -- $argv[1]; and cd -- $argv[1]'
+shell.pwsh = '''
+$null = New-Item -ItemType Directory -Force -Path $args[0]
+Set-Location -LiteralPath $args[0]
+'''
+
+[groups.dirs.functions.cdtmp]
+description = "Create a fresh temporary directory and cd into it"
+shell.posix = 'cd -- "$(mktemp -d)"'
+shell.fish = 'cd -- (mktemp -d)'
+shell.pwsh = '''
+$dir = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+$null = New-Item -ItemType Directory -Path $dir
+Set-Location -LiteralPath $dir
+'''

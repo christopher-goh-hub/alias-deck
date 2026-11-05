@@ -1,0 +1,67 @@
+format = 1
+
+[pack]
+name = "kubectl"
+version = "1.0.0"
+license = "MIT"
+description = "kubectl shortcuts for getting, describing, logging, and applying, plus kns to show or switch the current namespace."
+requires = ["kubectl"]
+
+[groups.get]
+description = "Read the cluster"
+
+[groups.get.aliases]
+k = "kubectl"
+kg = "kubectl get"
+kgp = "kubectl get pods"
+kgpw = "kubectl get pods -o wide"
+kgs = "kubectl get services"
+kgd = "kubectl get deployments"
+kgn = "kubectl get nodes"
+kga = "kubectl get all"
+kd = "kubectl describe"
+kdp = "kubectl describe pod"
+kl = "kubectl logs"
+klf = "kubectl logs -f"
+
+[groups.change]
+description = "Change the cluster"
+
+[groups.change.aliases]
+kaf = "kubectl apply -f"
+kdel = "kubectl delete"
+kex = "kubectl exec -it"
+kpf = "kubectl port-forward"
+krr = "kubectl rollout restart"
+krs = "kubectl rollout status"
+
+[groups.context]
+description = "Contexts and namespaces"
+
+[groups.context.aliases]
+kctx = "kubectl config current-context"
+kuse = "kubectl config use-context"
+
+[groups.context.functions.kns]
+description = "Print the current namespace, or switch the current context to the namespace given"
+shell.posix = '''
+if [ "$#" -eq 0 ]; then
+  kubectl config view --minify -o 'jsonpath={..namespace}'; echo
+else
+  kubectl config set-context --current --namespace "$1"
+fi
+'''
+shell.fish = '''
+if test (count $argv) -eq 0
+    kubectl config view --minify -o 'jsonpath={..namespace}'; echo
+else
+    kubectl config set-context --current --namespace $argv[1]
+end
+'''
+shell.pwsh = '''
+if ($args.Count -eq 0) {
+    kubectl config view --minify -o 'jsonpath={..namespace}'
+} else {
+    kubectl config set-context --current --namespace $args[0]
+}
+'''

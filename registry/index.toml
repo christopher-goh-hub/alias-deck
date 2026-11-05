@@ -1,0 +1,34 @@
+# The official alias-deck registry. Each entry names a pack and where it lives. Being listed is
+# not a review: `alias-deck add <name>` shows everything a pack adds before it installs.
+# To submit a pack, see README.md in this directory.
+format = 1
+
+[[packs]]
+name = "docker"
+source = "github:christopher-goh-hub/alias-deck//registry/packs/docker.toml"
+description = "Docker and Docker Compose shortcuts: containers, images, logs, and a shell inside a running container"
+tags = ["docker", "containers", "compose"]
+
+[[packs]]
+name = "everyday"
+source = "github:christopher-goh-hub/alias-deck//registry/packs/everyday.toml"
+description = "ll and la, PATH one entry per line, listening ports, du of the current directory, and extract for any archive"
+tags = ["files", "ls", "archives", "ports"]
+
+[[packs]]
+name = "git-essentials"
+source = "github:christopher-goh-hub/alias-deck//registry/packs/git-essentials.toml"
+description = "Short aliases for the Git commands you type all day: status, staging, commits, branches, sync, and history"
+tags = ["git", "vcs"]
+
+[[packs]]
+name = "kubectl"
+source = "github:christopher-goh-hub/alias-deck//registry/packs/kubectl.toml"
+description = "kubectl shortcuts for get, describe, logs, and apply, plus kns to show or switch the namespace"
+tags = ["kubernetes", "k8s", "kubectl"]
+
+[[packs]]
+name = "navigation"
+source = "github:christopher-goh-hub/alias-deck//registry/packs/navigation.toml"
+description = "Move around faster: .. and friends, up N, mkcd, and cdtmp for a fresh scratch directory"
+tags = ["cd", "directories", "files"]
