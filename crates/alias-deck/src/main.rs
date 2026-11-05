@@ -306,6 +306,13 @@ fn run_update(paths: &Paths, args: &Args) -> ExitCode {
 
 /// Applies the approval decision, prompting on the terminal when it asks for a person.
 fn approved(decision: Decision, name: &str, findings: &[Finding]) -> bool {
+    let stdin = io::stdin();
+    let terminal = stdin.is_terminal().then(|| stdin.lock());
+    confirm(decision, name, findings, terminal.map(|t| Box::new(t) as Box<dyn BufRead>))
+}
+
+/// `terminal` is `None` when stdin is not a terminal: then nobody can answer, so it refuses.
+fn confirm(decision: Decision, name: &str, findings: &[Finding], terminal: Option<Box<dyn BufRead + '_>>) -> bool {
     let confirm = match decision {
         Decision::Proceed => return true,
         Decision::Refuse { unallowed } => {
@@ -321,7 +328,7 @@ fn approved(decision: Decision, name: &str, findings: &[Finding]) -> bool {
         }
         Decision::Ask(c) => c,
     };
-    if !io::stdin().is_terminal() {
+    let Some(mut terminal) = terminal else {
         let hint = if findings.iter().any(|f| f.severity == Severity::Danger) {
             "--yes and an --allow <rule> for each Danger finding"
         } else {
@@ -329,7 +336,7 @@ fn approved(decision: Decision, name: &str, findings: &[Finding]) -> bool {
         };
         eprintln!("alias-deck: stdin is not a terminal, so alias-deck cannot ask you to confirm. Read the preview above, then re-run with {hint}.");
         return false;
-    }
+    };
     let prompt = match confirm {
         Confirm::YesNo => format!("Install {name}? [y/N] "),
         Confirm::TypeName => format!("{name} has Danger findings. Type the pack name ({name}) to install it: "),
@@ -337,7 +344,7 @@ fn approved(decision: Decision, name: &str, findings: &[Finding]) -> bool {
     eprint!("{prompt}");
     let _ = io::stderr().flush();
     let mut line = String::new();
-    if io::stdin().lock().read_line(&mut line).is_err() {
+    if terminal.read_line(&mut line).is_err() {
         return false;
     }
     let answer = line.trim();
@@ -410,5 +417,26 @@ fn run_setup(paths: &Paths, shell: Option<Shell>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail(&e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn answer(decision: Decision, typed: Option<&'static str>) -> bool {
+        let terminal = typed.map(|t| Box::new(io::Cursor::new(t)) as Box<dyn BufRead>);
+        confirm(decision, "alice-tools", &[], terminal)
+    }
+
+    #[test]
+    fn prompts_accept_only_the_expected_answer() {
+        assert!(answer(Decision::Ask(Confirm::YesNo), Some("y\n")));
+        assert!(!answer(Decision::Ask(Confirm::YesNo), Some("\n")), "the default is no");
+        assert!(!answer(Decision::Ask(Confirm::TypeName), Some("y\n")), "a reflexive y is not the pack name");
+        assert!(answer(Decision::Ask(Confirm::TypeName), Some("alice-tools\n")));
+        assert!(!answer(Decision::Ask(Confirm::YesNo), None), "no terminal means no answer");
+        assert!(answer(Decision::Proceed, None));
+        assert!(!answer(Decision::Refuse { unallowed: vec![Rule::EnvLoaderHijack] }, Some("y\n")));
     }
 }
