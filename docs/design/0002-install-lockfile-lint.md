@@ -57,7 +57,7 @@ Accepted spellings:
 
 ### Lockfile. `$XDG_CONFIG_HOME/alias-deck/deck.lock`
 
-Machine-written, deterministic, one table per `Git` source. Local sources have no entry.
+Machine-written, deterministic, one table per `Git` source, sorted by source. Local sources have no entry. A `LockedPack` holds the git URL and repo path directly rather than a `Source`, so a lock entry for a local file cannot exist.
 
 ```toml
 format = 1
@@ -72,10 +72,10 @@ version = "2.1.0"
 
 ### Store. `$XDG_DATA_HOME/alias-deck/` (default `~/.local/share/alias-deck/`)
 
-- `packs/<sha256>.toml` holds the approved bytes, content-addressed. A build reads only these for `Git` sources and re-hashes them. A mismatch fails the build for that pack. It never refetches silently.
+- `packs/<sha256>.toml` holds the approved bytes, content-addressed. A build reads only these for `Git` sources and re-hashes them. A mismatch fails the build, and the build then writes no init file, so the files from the last good build stay in place. It never refetches silently.
 - `init.bash`, `init.zsh`, `init.fish`, `init.ps1` are the compiled outputs. All four are always built, so switching shells needs no rebuild. Each is written to a temp file and renamed, so a crash never leaves a half-written init file.
 
-Fetching uses the `git` CLI, so there is no HTTP or TLS stack in the binary. `git ls-remote` resolves the ref to a commit. Then `git fetch --depth 1 <commit>` runs into a temp repo, and `git show <commit>:<path>` reads the bytes. Every git invocation passes the URL after `--` and sets `GIT_TERMINAL_PROMPT=0`.
+Fetching uses the `git` CLI, so there is no HTTP or TLS stack in the binary. `git ls-remote -- <url> <ref> <ref>^{}` resolves the ref to a commit, preferring a peeled tag, then a tag, then a branch, so an annotated tag pins its commit and not the tag object. A full commit id needs no resolving. Then `git fetch --depth 1 --no-tags -- <url> <commit>` runs into a temp repo, and `git cat-file blob <commit>:<path>` reads the raw blob. Every git invocation passes the URL after `--`, sets `GIT_TERMINAL_PROMPT=0`, and takes `HOME` and `XDG_CONFIG_HOME` from the caller's `Paths`.
 
 ### Lint. Pure, in `alias-deck-core`
 
@@ -97,16 +97,16 @@ Rules are one table of `(Rule, Severity, matcher)`, with no scattered conditiona
 | Rule | Severity | Fires on |
 |---|---|---|
 | `env-loader-hijack` | Danger | Setting a var that injects code into other programs: `LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, any `DYLD_*`, `BASH_ENV`, `ENV`, `ZDOTDIR`, `PROMPT_COMMAND`, `NODE_OPTIONS`, `PYTHONSTARTUP`, `PYTHONPATH`, `PERL5OPT`, `PERL5LIB`, `RUBYOPT`, `GIT_SSH`, `GIT_SSH_COMMAND`, `GIT_EXEC_PATH`, `GIT_CONFIG_GLOBAL`, `SSH_ASKPASS`, `SUDO_ASKPASS`, `GIT_ASKPASS` |
-| `path-unsafe-dir` | Danger | A PATH entry that is relative, or under `/tmp`, `/var/tmp`, `/dev/shm`, `/private/tmp` |
+| `path-unsafe-dir` | Danger | A PATH entry that is relative or empty, or under `/tmp`, `/var/tmp`, `/dev/shm`, `/private/tmp`. A `PATH = "..."` value is split on `:` first |
 | `shadows-sensitive` | Danger | An alias or function named `sudo`, `su`, `doas`, `ssh`, `scp`, `sftp`, `ssh-add`, `ssh-keygen`, `gpg`, `gpg2`, `passwd`, `login`, `security`, `op`, `pass`, `kinit`, `secret-tool` |
 | `body-pipe-to-shell` | Danger | A function body that pipes a download to a shell, such as `curl … \| sh` or `iwr … \| iex` |
 | `env-traffic` | Warn | `http_proxy`, `https_proxy`, `all_proxy` (any case), `NO_PROXY`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_NO_VERIFY`, `NODE_TLS_REJECT_UNAUTHORIZED` |
 | `env-history` | Warn | `HISTFILE`, `HISTSIZE`, `HISTFILESIZE`, `SAVEHIST`, `HISTCONTROL`, `HISTIGNORE` |
 | `body-risky` | Warn | `eval`, `base64 -d`, `rm -rf` on `/` `~` or `$HOME`, `chmod 777`, `sudo`, redirects into shell rc files |
 | `shadows-core` | Info | An alias or function named like a core tool: `ls`, `cd`, `rm`, `cp`, `mv`, `cat`, `grep`, `find`, `git`, `curl`, `make`, and a short fixed list |
-| `path-prepend` | Info | Any PATH prepend. It shadows system tools |
+| `path-prepend` | Info | Any PATH prepend, or a `PATH = "..."` that replaces the list. Either shadows system tools |
 | `native-function` | Info | `InShell` bodies. They run inside your shell and can change the directory and variables |
-| `secret` | Info | Declares a secret. Shows the reason and whether a binding exists |
+| `secret` | Info | Declares a secret, with its reason. Whether a binding exists depends on the user's file, so the preview shows it, not `lint` |
 
 Body rules are text heuristics, and the preview says so. They flag code for a person to read. They do not prove it safe. The real control is that the preview shows every body in full.
 
@@ -131,6 +131,10 @@ Body rules are text heuristics, and the preview says so. They flag code for a pe
 
 `update` builds the same preview as an entry-level diff between the approved bytes and the new bytes. It shows added, removed, and changed entries, with full old and new bodies for changed functions, and only new findings. If the bytes are identical, it says "up to date" and asks nothing.
 
+`diff_packs` keys an entry by group, kind, and name, because an alias and a function may share a name in one group. A change to a group's OS list changes its entries. A finding counts as new when its entry was added or changed, or when the old pack had no finding with the same rule, entry, and message. So a changed body is reviewed whole, and the approval policy runs on the new findings only.
+
+Every string from the pack goes through one escaping function before it reaches the terminal. Control characters other than newline and tab, and the Unicode bidi and zero-width controls, print as `\u{..}`, so a body cannot hide its own lines from the preview.
+
 ## Commands
 
 | Command | Does |
@@ -139,7 +143,7 @@ Body rules are text heuristics, and the preview says so. They flag code for a pe
 | `remove <pack-name\|source>` | Drop from manifest and lock, then build. Store bytes are left alone |
 | `update [<pack-name>] [--yes] [--allow <rule>]...` | Re-resolve the ref and show the diff. Confirm, then rewrite lock and build |
 | `list` | Packs in precedence order with version, commit, entry counts, and enabled flag |
-| `build` | Compile every enabled pack into the four init files. Report omitted entries once per shell |
+| `build` | Compile every enabled pack into the four init files. Report each omitted entry once, with the shells that left it out |
 | `setup [--shell <s>]` | Idempotently wire the init file into the shell. Print the exact file and line it changed |
 | `lint <pack.toml>...` | Authors run this. It prints findings and exits nonzero on Danger |
 | `compile` | Unchanged |
@@ -148,17 +152,18 @@ Body rules are text heuristics, and the preview says so. They flag code for a pe
 
 | Shell | File | Line |
 |---|---|---|
-| bash | `~/.bashrc`, and on macOS also `~/.bash_profile` if it exists and does not source `.bashrc` | `[ -f "<init>" ] && . "<init>"` |
+| bash | `~/.bashrc`, and on macOS also `~/.bash_profile` if it exists and does not mention `.bashrc` | `[ -f '<init>' ] && . '<init>'` |
 | zsh | `${ZDOTDIR:-$HOME}/.zshrc` | same |
-| fish | `~/.config/fish/conf.d/alias-deck.fish`, a new file. No rc edit | `source "<init>"` |
-| pwsh | `pwsh -NoProfile -Command '$PROFILE.CurrentUserAllHosts'` | `if (Test-Path '<init>') { . '<init>' }` |
+| fish | `$XDG_CONFIG_HOME/fish/conf.d/alias-deck.fish`, a new file. No rc edit | `test -f '<init>'; and source '<init>'` |
+| pwsh | `pwsh -NoProfile -Command '$PROFILE.CurrentUserAllHosts'` | `if (Test-Path -LiteralPath '<init>') { . '<init>' }` |
 
-The line goes inside a marked block (`# >>> alias-deck >>>` … `# <<< alias-deck <<<`). Re-running replaces the block in place, so it is never duplicated.
+The path is quoted for each shell, so a home directory with a space or a quote still works. The line goes inside a marked block (`# >>> alias-deck >>>` … `# <<< alias-deck <<<`). Re-running replaces the block in place, so it is never duplicated, and collapses duplicate blocks into one. A start marker with no end marker is left alone. A symlinked rc file is edited through the link, so the link survives.
 
 ## Where code lives
 
 - `alias-deck-core` stays pure and does no IO. It gains the `lint` module, `Source` parsing, the manifest and lock models (parse and serialize through `toml_edit`), and `diff_packs(old, new)`.
-- `crates/alias-deck` gains a library target (`src/lib.rs`) for the IO operations: fetch, store, build, setup, and the approval policy. That way the future Tauri app calls the same functions the CLI does. `main.rs` stays argument parsing and rendering.
+- `crates/alias-deck` gains a library target (`src/lib.rs`) for the IO operations: fetch, store, build, setup, and the approval policy. That way the future Tauri app calls the same functions the CLI does. `main.rs` stays argument parsing, prompting, and `render.rs`. Every library function takes a `Paths` (home, XDG config and data homes, `ZDOTDIR`), so a caller or a test decides where the deck lives.
+- Each install change is two steps. `fetch` or `check_update` reads and lints without writing. The caller shows the preview and asks. `approve` writes the store, then the lock, then the manifest, and builds. A crash between the lock and the manifest leaves a lock entry that every reader ignores and the next write replaces.
 
 ## Verification
 
@@ -172,3 +177,14 @@ The line goes inside a marked block (`# >>> alias-deck >>>` … `# <<< alias-dec
   - `setup` run twice leaves one block.
   - A local source change is picked up live by `build`.
 - The macOS keychain lookup has an opt-in real test (`ALIAS_DECK_TEST_KEYCHAIN=1`). It adds a throwaway generic password, compiles a secret bound to it, sources the init file in zsh, checks the value, and deletes the item.
+
+## Changes made during implementation
+
+- **A store mismatch fails the whole build.** The first draft failed only the tampered pack. A partial build drops the user's other approved entries without a word, while the last good init files hold only approved code. So any pack that fails to load stops the build, and the error names each failing pack.
+- **`git cat-file blob` instead of `git show`.** Both print the same bytes today. `cat-file` is the plumbing command for raw object contents, so its output does not depend on porcelain options, and the hash covers exactly the stored blob. `ls-remote` also asks for the peeled `^{}` ref, because an annotated tag otherwise resolves to the tag object.
+- **`LockedPack` holds a `GitUrl` and a `RepoPath`, not a `Source`.** A lock entry for a local file is then unrepresentable.
+- **Re-adding a pack keeps its `enabled` flag.** `update` approves through the same path as `add`, and must not turn on a pack the user turned off.
+- **The `secret` rule does not report binding status.** Lint is pure over the pack. The preview reads the user's secrets file and shows the status next to the secret.
+- **Setup lines use single quotes, and fish checks that the file exists.** The draft's double quotes would expand a `$` in a home path. Without the check, fish prints an error when the init file is missing.
+- **The pwsh note prints once.** `Note::PwshArgRewriting` stays on each `EntryReport`, where a GUI needs it. `compile` and `build` print one line per note kind that names every affected entry.
+- **Preview text is escaped.** A hostile body could otherwise use terminal escape codes to erase lines of its own preview.

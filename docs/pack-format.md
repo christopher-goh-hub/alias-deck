@@ -134,6 +134,35 @@ The variable is set only when the lookup exits 0 and prints something. Trailing 
 
 `alias-deck compile a.toml b.toml` loads packs in order. When two entries share a name, the later one wins and the report names the one it replaced. `PATH` lists from every pack apply. One pack can define the same name in groups for different operating systems, because the OS check runs first.
 
+## Safety lint
+
+`alias-deck lint pack.toml` checks a pack the way `add` checks it for the people who install it. It prints each finding and exits 1 if any finding is Danger. Run it before you publish.
+
+| Rule | Severity | Fires on |
+|---|---|---|
+| `env-loader-hijack` | Danger | Setting a variable that injects code into other programs: `LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, any `DYLD_*`, `BASH_ENV`, `ENV`, `ZDOTDIR`, `PROMPT_COMMAND`, `NODE_OPTIONS`, `PYTHONSTARTUP`, `PYTHONPATH`, `PERL5OPT`, `PERL5LIB`, `RUBYOPT`, `GIT_SSH`, `GIT_SSH_COMMAND`, `GIT_EXEC_PATH`, `GIT_CONFIG_GLOBAL`, `SSH_ASKPASS`, `SUDO_ASKPASS`, `GIT_ASKPASS` |
+| `path-unsafe-dir` | Danger | A `PATH` entry that is relative or empty, or under `/tmp`, `/var/tmp`, `/dev/shm`, or `/private/tmp` |
+| `shadows-sensitive` | Danger | An alias or function named `sudo`, `su`, `doas`, `ssh`, `scp`, `sftp`, `ssh-add`, `ssh-keygen`, `gpg`, `gpg2`, `passwd`, `login`, `security`, `op`, `pass`, `kinit`, or `secret-tool` |
+| `body-pipe-to-shell` | Danger | A function body that runs what it downloads, such as `curl ... \| sh`, `bash <(curl ...)`, `sh -c "$(curl ...)"`, or `iwr ... \| iex` |
+| `env-traffic` | Warn | `http_proxy`, `https_proxy`, `all_proxy`, and `no_proxy` in any case, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_NO_VERIFY`, `NODE_TLS_REJECT_UNAUTHORIZED` |
+| `env-history` | Warn | `HISTFILE`, `HISTSIZE`, `HISTFILESIZE`, `SAVEHIST`, `HISTCONTROL`, `HISTIGNORE` |
+| `body-risky` | Warn | A body that uses `eval`, `base64 -d`, `rm -rf` on `/`, `~`, or `$HOME`, `chmod 777`, `sudo`, or a redirect into a shell startup file |
+| `shadows-core` | Info | An alias or function named like a common command, such as `ls`, `cd`, `rm`, `grep`, `git`, or `curl` |
+| `path-prepend` | Info | Any `PATH` prepend, or a `PATH = "..."` that replaces the list. Either one puts the pack's commands ahead of system tools |
+| `native-function` | Info | Every `shell.*` function. It runs inside your shell and can change your directory and variables |
+| `secret` | Info | Every secret the pack asks for, with its reason |
+
+The body rules read text. They point a reader at code worth reading, and they miss code written to hide from them. The preview prints every body in full for that reason.
+
+When you install a pack, the highest severity decides what alias-deck asks:
+
+| Highest severity | In a terminal | With `--yes` |
+|---|---|---|
+| none, Info, or Warn | `[y/N]` | Installs |
+| Danger | Type the pack name | Refuses unless `--allow <rule>` names each Danger rule |
+
 ## What gets reported
 
 Every entry gets one line in the compile report: emitted, or omitted with a reason. The reasons are an OS condition, a name shadowed by a later entry, a name the shell reserves, no body for the shell, a script function on Windows, an unbound secret, a secret source with no lookup on this OS, and a path entry that contains the list separator.
+
+`alias-deck compile` and `alias-deck build` print only the omitted entries. `build` compiles for all four shells and prints each omitted entry once, with the shells that left it out. The PowerShell note about argument rewriting stays on each entry in the report, and the CLI prints it as one line that names every affected entry.
